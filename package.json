@@ -1,16 +1,16 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "",
 	"main": "./dist/index.js",
-  "private":false,
+	"private": false,
 	"repository": {
 		"type": "git",
 		"url": "git@github.com:Mhmdhammoud/meritt-utils.git"
 	},
-  "publishConfig": {
-    "access": "public"
-  },  
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"dev-ts": "ts-node-dev --respawn --transpile-only src/index.ts",
 		"dev": "nodemon ./dist/index.js",
@@ -19,8 +19,7 @@
 		"types": "tsc --noemit",
 		"prepare": "husky install",
 		"lint": "eslint src --fix",
-		"prepublish": "yarn build",
-		"postinstall": "yarn prepare"
+		"prepublish": "yarn build"
 	},
 	"dependencies": {
 		"dotenv": "^10.0.0"
