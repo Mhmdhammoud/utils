@@ -1,7 +1,18 @@
 declare class Crypto {
     private _primeNumberP;
     private _primeNumberQ;
+    private _phiN;
     private _moduloDenominator;
+    /**
+     *
+     * @param number - The number to check if prime
+     * @returns The boolean answer of prime checking operation
+     * @example
+     * ```typescript
+     * this._isPrime(5)
+     * ```
+     * */
+    private _isPrime;
     /**
      * Set the P prime number for the RSA algorithm
      * @param primeP - The prime number P of type string
@@ -33,6 +44,36 @@ declare class Crypto {
      * ```
      * */
     private _modularExponentiation;
+    /**
+     *
+     * @param temporaryVarriableOne - The number one
+     * @param temporaryVarriableTwo- The  number two (phi n)
+     * @returns The boolean answer of relatively prime checking operation with phi n
+     * @example
+     * ```typescript
+     * this._areRelativelyPrime(5,9)
+     * ```
+     * */
+    private _areRelativelyPrime;
+    /**
+     *
+     * @returns The public and private key number which is a random number generated to match conditions set by RSA algorithm
+     * @example
+     * ```typescript
+     * crypto.generateKeys()
+     * ```
+     * */
+    generateKeys: () => Record<'publicKey' | 'privateKey', number>;
+    /**
+     *
+     * @param publicKey - The public key number
+     * @returns The private key number which is the modulus inverse with repect to modulo denominator
+     * @example
+     * ```typescript
+     * crypto.generatePrivateKey(5)
+     * ```
+     * */
+    private _generatePrivateKey;
     /**
      * Encrypt the message using the public key
      * @param message - The message to encrypt of type string|number|Record
