@@ -1,5 +1,30 @@
 # Changes
 
+## Version 1.0.4
+
+### Added
+
+- Added generateKeys method that returns public and private keys
+
+```typescript
+import {Crypto} from '@mhmdhammoud/meritt-utils'
+
+// Example of generating a public and a private key
+const response = Crypto.generateKeys()
+console.log(response)
+
+{
+    publicKey:7,
+    privateKey:247,
+}
+
+
+```
+
+### Fixes and Improvements
+
+- Checking for prime numbers discarding even and odd numbers and skips 6 iterations at a time until radical I
+
 ## Version 1.0.3
 
 ### Added

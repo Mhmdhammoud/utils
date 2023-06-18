@@ -2,6 +2,10 @@
 
 This is a collection of utility functions that are often used in Meritt projects.
 
+## Actions
+
+[![Changes](https://github.com/Mhmdhammoud/meritt-utils/actions/workflows/push.yml/badge.svg)](https://github.com/Mhmdhammoud/meritt-utils/actions/workflows/push.yml) [![NPM Publish on Release](https://github.com/Mhmdhammoud/meritt-utils/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/Mhmdhammoud/meritt-utils/actions/workflows/npm-publish.yml)
+
 ## Installation
 
 For npm:
