@@ -2,6 +2,8 @@
 
 ## Version 1.0.3
 
+### Added
+
 - Added Formatter class for manipulating strings
 
 ```typescript
@@ -10,6 +12,14 @@ import {Formatter} from '@mhmdhammoud/meritt-utils'
 // Example of creating a product slug
 const slug = Formatter.slugify('My Product Name') // my-product-name
 ```
+
+### Fixes and Improvements
+
+- Fixed bug in Crypto class where encrypting a string with a key that is not a number would throw an error
+
+- Improved Crypto class to allow encrypting and decrypting numbers and objects
+
+- Documented Crypto class
 
 ## Version 1.0.2
 
