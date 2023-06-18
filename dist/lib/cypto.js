@@ -1,13 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-/**
- * The Crypto class
- * @class Crypto
- * @example
- * ```typescript
- * import crypto from './lib/crypto'
- * ```
- * */
+/*
+     Author : Omar Sawwas
+     Date : 2023-06-17
+     Description : RSA algorithm
+     Version : 1.0
+*/
 class Crypto {
     constructor() {
         // Default variables
@@ -16,15 +14,18 @@ class Crypto {
         this._moduloDenominator = this._primeNumberP * this._primeNumberQ;
         /**
          *
-         * @param {string} base - The base number
-         * @param {string} exponent - The exponent number
-         * @memberof Crypto
+         * @param base - The base number of type number
+         * @param exponent - The exponent number of type number
+         * @returns The modular exponentiation of the base and the exponent
          * @example
          * ```typescript
          * this.modularExponentiation(2, 3)
          * ```
          * */
         this._modularExponentiation = (base, exponent) => {
+            if (isNaN(base) || isNaN(exponent)) {
+                throw new Error('Provide a valid number');
+            }
             if (this._moduloDenominator === 1) {
                 return 0;
             }
@@ -41,33 +42,52 @@ class Crypto {
         };
         /**
          * Encrypt the message using the public key
-         * @param {string} message - The message to encrypt
-         * @param {string} publicKey - The public key
-         * @memberof Crypto
+         * @param message - The message to encrypt of type string|number|Record
+         * @param publicKey - The public key to encrypt the message with of type number
+         * @returns The encrypted message of type number[]
          * @example
          * ```typescript
          * crypto.encrypt('Hello World', 7)
          * ```
          * */
         this.encrypt = (message, publicKey) => {
-            const b = [];
+            if (isNaN(publicKey)) {
+                throw new Error('Public key should be a number');
+            }
+            if (typeof message === 'number') {
+                message = message.toString();
+            }
+            if (typeof message === 'object') {
+                message = JSON.stringify(message);
+            }
+            const encryptedMessage = [];
             for (let i = 0; i < message.length; i++) {
                 const a = message.charCodeAt(i);
-                b.push(this._modularExponentiation(a, publicKey));
+                encryptedMessage.push(this._modularExponentiation(a, publicKey));
             }
-            return b;
+            return encryptedMessage;
         };
         /**
          * Decrypt the message using the private key
-         * @param {string} encryptedMessage - The ciphertext to decrypt
-         * @param {string} privateKey - The private key
-         * @memberof Crypto
+         * @param encryptedMessage - The encryptedMessage to decrypt of type number[]
+         * @param privateKey - The private key to decrypt the message with of type number
+         * @returns The decrypted message of type string
          * @example
          * ```typescript
          * crypto.decrypt([72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100], 23)
          * ```
          * */
         this.decrypt = (encryptedMessage, privateKey) => {
+            if (isNaN(privateKey)) {
+                throw new Error('Private key should be a number');
+            }
+            if (!Array.isArray(encryptedMessage)) {
+                throw new Error('Encrypted message should be an array');
+            }
+            const allValidNumbers = encryptedMessage.every((number) => !isNaN(number));
+            if (!allValidNumbers) {
+                throw new Error('Encrypted message should be an array of numbers');
+            }
             const decryptedAsciiMessage = [];
             for (let i = 0; i < encryptedMessage.length; i++) {
                 const a = encryptedMessage[i];
@@ -82,14 +102,17 @@ class Crypto {
     }
     /**
      * Set the P prime number for the RSA algorithm
-     * @param {string} primeP - The prime number P
-     * @memberof Crypto
+     * @param primeP - The prime number P of type string
+     * @returns void
      * @example
      * ```typescript
      * crypto.setPrimeP(17)
      * ```
      * */
     setPrimeP(primeP) {
+        if (isNaN(primeP)) {
+            throw new Error('Provide a valid number');
+        }
         let isPrime = true;
         for (let i = 2; i < primeP; i++) {
             if (primeP % i === 0) {
@@ -104,14 +127,17 @@ class Crypto {
     }
     /**
      * Set the Q prime number for the RSA algorithm
-     * @param {string} primeQ - The prime number Q
-     * @memberof Crypto
+     * @param primeQ - The prime number Q of type string
+     * @returns void
      * @example
      * ```typescript
      * crypto.setPrimeQ(19)
      * ```
      * */
     setPrimeQ(primeQ) {
+        if (isNaN(primeQ)) {
+            throw new Error('Provide a valid number');
+        }
         let isPrime = true;
         for (let i = 2; i < primeQ; i++) {
             if (primeQ % i === 0) {

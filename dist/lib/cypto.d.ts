@@ -1,19 +1,11 @@
-/**
- * The Crypto class
- * @class Crypto
- * @example
- * ```typescript
- * import crypto from './lib/crypto'
- * ```
- * */
 declare class Crypto {
     private _primeNumberP;
     private _primeNumberQ;
     private _moduloDenominator;
     /**
      * Set the P prime number for the RSA algorithm
-     * @param {string} primeP - The prime number P
-     * @memberof Crypto
+     * @param primeP - The prime number P of type string
+     * @returns void
      * @example
      * ```typescript
      * crypto.setPrimeP(17)
@@ -22,8 +14,8 @@ declare class Crypto {
     setPrimeP(primeP: number): void;
     /**
      * Set the Q prime number for the RSA algorithm
-     * @param {string} primeQ - The prime number Q
-     * @memberof Crypto
+     * @param primeQ - The prime number Q of type string
+     * @returns void
      * @example
      * ```typescript
      * crypto.setPrimeQ(19)
@@ -32,9 +24,9 @@ declare class Crypto {
     setPrimeQ(primeQ: number): void;
     /**
      *
-     * @param {string} base - The base number
-     * @param {string} exponent - The exponent number
-     * @memberof Crypto
+     * @param base - The base number of type number
+     * @param exponent - The exponent number of type number
+     * @returns The modular exponentiation of the base and the exponent
      * @example
      * ```typescript
      * this.modularExponentiation(2, 3)
@@ -43,20 +35,20 @@ declare class Crypto {
     private _modularExponentiation;
     /**
      * Encrypt the message using the public key
-     * @param {string} message - The message to encrypt
-     * @param {string} publicKey - The public key
-     * @memberof Crypto
+     * @param message - The message to encrypt of type string|number|Record
+     * @param publicKey - The public key to encrypt the message with of type number
+     * @returns The encrypted message of type number[]
      * @example
      * ```typescript
      * crypto.encrypt('Hello World', 7)
      * ```
      * */
-    encrypt: (message: string, publicKey: number) => number[];
+    encrypt: (message: string | number | Record<any, any>, publicKey: number) => number[];
     /**
      * Decrypt the message using the private key
-     * @param {string} encryptedMessage - The ciphertext to decrypt
-     * @param {string} privateKey - The private key
-     * @memberof Crypto
+     * @param encryptedMessage - The encryptedMessage to decrypt of type number[]
+     * @param privateKey - The private key to decrypt the message with of type number
+     * @returns The decrypted message of type string
      * @example
      * ```typescript
      * crypto.decrypt([72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100], 23)
