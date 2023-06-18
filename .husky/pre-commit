@@ -45,14 +45,14 @@ echo -ne '\n'
 
 echo -e "${yellow}Running types...${clear}"
 echo -ne '\n'
-yarn types
+npm run types
 echo -ne '\n'
 
 echo -e "${green}types passed...${clear} ✅"
 echo -ne '\n'
 echo -e "${yellow}Running linting...${clear}"
 
-yarn lint
+npm run lint
 echo -e "${green}linting passed...${clear} ✅"
 
 echo -ne '\n'

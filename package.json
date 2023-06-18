@@ -19,7 +19,7 @@
 		"types": "tsc --noemit",
 		"prepare": "husky install",
 		"lint": "eslint src --fix",
-		"prepublish": "yarn build"
+		"prepublish": "npm run build"
 	},
 	"dependencies": {
 		"dotenv": "^10.0.0"

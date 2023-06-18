@@ -1,0 +1,29 @@
+name: Changes
+on:
+  push:
+    branches: [dev]
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - run: npm ci
+      - run: npm run types
+  notify:
+    needs: [type-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify by Email
+        uses: dawidd6/action-send-mail@v2
+        with:
+          server_address: ${{ secrets.EMAIL_HOST }}
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: ${{ github.event.head_commit.message }} ${{ github.job }} job of ${{ github.repository }} has ${{ job.status }}
+          body: ${{ github.job }} job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ job.status }}
+          to: mohammad.hammoud.lb@hotmail.com,steef12009@gmail.com,sawwas.omar@gmail.com
+          from: Github Action
