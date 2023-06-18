@@ -1,0 +1,62 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+blue='\033[0;34m'
+magenta='\033[0;35m'
+cyan='\033[0;36m'
+clear='\033[0m'
+echo "
+
+  __  __ ______ _____  _____ _______ _______    _____  ________      __
+ |  \/  |  ____|  __ \|_   _|__   __|__   __|  |  __ \|  ____\ \    / /
+ | \  / | |__  | |__) | | |    | |     | |     | |  | | |__   \ \  / /
+ | |\/| |  __| |  _  /  | |    | |     | |     | |  | |  __|   \ \/ /
+ | |  | | |____| | \ \ _| |_   | |     | |     | |__| | |____   \  /
+ |_|  |_|______|_|  \_\_____|  |_|     |_|     |_____/|______|   \/
+
+
+"
+echo -e "Let's hope you are not ${red}DUMB${clear}!"
+
+echo -ne '\n'
+
+echo -e "${yellow}Or Are You ??${clear}!"
+echo -ne '\n'
+echo -e "${yellow}Running pre-commit hook...${clear}"
+echo -ne '\n'
+echo -ne '\n'
+
+echo -ne '#####################                                                    (25%)\r'
+sleep 0.3
+echo -ne '##############################                                          (35%)\r'
+sleep 0.3
+echo -ne '######################################                                  (45%)\r'
+sleep 0.3
+echo -ne '############################################################            (77%)\r'
+sleep 0.3
+echo -ne '##################################################################     (100%)\r'
+
+echo -ne '\n'
+echo -ne '\n'
+echo -ne '\n'
+
+echo -e "${yellow}Running types...${clear}"
+echo -ne '\n'
+yarn types
+echo -ne '\n'
+
+echo -e "${green}types passed...${clear} ✅"
+echo -ne '\n'
+echo -e "${yellow}Running linting...${clear}"
+
+yarn lint
+echo -e "${green}linting passed...${clear} ✅"
+
+echo -ne '\n'
+
+echo -e "${yellow}Seems like you are a${clear} ${green}CLEVER DEVELOPER${clear} 👌"
+echo -ne '\n'
+echo -e "${green}GOOD TO GO${clear} 🚀🚀🚀"
