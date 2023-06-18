@@ -16,7 +16,7 @@ class Formatter {
 	 * // => 'Hello-World'
 	 * ```
 	 * */
-	toUpperFirst = (_: string | number, withSpacing = true) => {
+	toUpperFirst = (_: string | number, withSpacing = true): string => {
 		if (typeof _ !== 'string') throw new Error('Provide a valid string')
 		if (withSpacing) {
 			return _.split(' ')
@@ -77,6 +77,34 @@ class Formatter {
 			email.slice(2, separatorIndex).replace(/./g, '*') +
 			email.slice(separatorIndex)
 		)
+	}
+
+	/**
+	 * Capitalizes the first letter of each word in a sentence and removes non-alphanumeric characters.
+	 * @param sentence - The input sentence to be processed.
+	 * @returns A new sentence with the first letter of each word capitalized and non-alphanumeric characters removed.
+	 * @example
+	 * ```typescript
+	 * const sentence = 'this is34354345a---sentence'
+	 * const newSentence = ToUpperTitle(sentence)
+	 * console.log(newSentence) // 'This Is A Sentence'
+	 * ```
+	 */
+	toUpperTitle = (sentence: string): string => {
+		if (typeof sentence !== 'string') throw new Error('Provide a valid string')
+		if (!sentence) throw new Error('Provide a valid string')
+
+		const sanitizedSentence = sentence.replace(/[^a-zA-Z0-9]+/g, ' ')
+		const words = sanitizedSentence.split(' ')
+		const capitalizedWords = []
+
+		for (let i = 0; i < words.length; i++) {
+			const word = words[i]
+			const capitalizedWord = word.charAt(0).toUpperCase() + word.slice(1)
+			capitalizedWords.push(capitalizedWord)
+		}
+
+		return capitalizedWords.join(' ')
 	}
 
 	/**

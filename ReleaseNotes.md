@@ -1,5 +1,22 @@
 # Changes
 
+## Version 1.0.5
+
+### Added
+
+- Added toUpperTitle method that accepts a string and removes all non alphanumeric characters and capitalizes each letter of every first word
+
+```typescript
+import {Formatter} from '@mhmdhammoud/meritt-utils'
+
+// Usage Example
+const sentence:string = "hello__world$$99"
+console.log(Formatter.toUpperTitle(sentence))
+
+console : Hello World 99
+
+```
+
 ## Version 1.0.4
 
 ### Added
@@ -41,9 +58,7 @@ const slug = Formatter.slugify('My Product Name') // my-product-name
 ### Fixes and Improvements
 
 - Fixed bug in Crypto class where encrypting a string with a key that is not a number would throw an error
-
 - Improved Crypto class to allow encrypting and decrypting numbers and objects
-
 - Documented Crypto class
 
 ## Version 1.0.2
