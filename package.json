@@ -1,6 +1,6 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "",
 	"main": "./dist/index.js",
 	"private": false,
@@ -20,9 +20,6 @@
 		"prepare": "husky install",
 		"lint": "eslint src --fix",
 		"prepublish": "npm run build"
-	},
-	"dependencies": {
-		"dotenv": "^10.0.0"
 	},
 	"devDependencies": {
 		"ts-node-dev": "^1.1.8",

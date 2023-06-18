@@ -29,6 +29,18 @@ declare class Formatter {
      * */
     obfuscate: (email: string) => string;
     /**
+     * Capitalizes the first letter of each word in a sentence and removes non-alphanumeric characters.
+     * @param sentence - The input sentence to be processed.
+     * @returns A new sentence with the first letter of each word capitalized and non-alphanumeric characters removed.
+     * @example
+     * ```typescript
+     * const sentence = 'this is34354345a---sentence'
+     * const newSentence = ToUpperTitle(sentence)
+     * console.log(newSentence) // 'This Is A Sentence'
+     * ```
+     */
+    toUpperTitle: (sentence: string) => string;
+    /**
      * @remarks Generates a slug from a given string
      * @param title - string to be converted to slug
      * @returns slug
