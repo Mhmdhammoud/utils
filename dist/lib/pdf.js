@@ -1,0 +1,27 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/*
+     Author : Mustafa Halabi https://github.com/mustafahalabi
+     Date : 2023-06-24
+     Description : Image to PDF converter
+     Version : 1.0
+*/
+class Pdf {
+    constructor() {
+        /**
+         * @remarks Convert image links into base64 format
+         * @param url - The image url
+         * @returns string
+         * @example
+         * ```typescript
+         * pdf.getBase64Images('https://fastly.picsum.photos/id/15/200/300.jpg?hmac=lozQletmrLG9PGBV1hTM1PnmvHxKEU0lAZWu8F2oL30')
+         * // => 'Hello-World'
+         * ```
+         * */
+        this.getBase64Images = (url) => {
+            return '';
+        };
+    }
+}
+const pdf = new Pdf();
+exports.default = pdf;
