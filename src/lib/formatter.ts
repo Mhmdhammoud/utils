@@ -1,5 +1,5 @@
 /*
-	 Author : Mhmd Hammoud
+	 Author : Mhmd Hammoud https://github.com/mhmdhammoud
 	 Date : 2023-06-17
 	 Description : String manipulation
 	 Version : 1.0
@@ -19,14 +19,16 @@ class Formatter {
 	toUpperFirst = (_: string | number, withSpacing = true): string => {
 		if (typeof _ !== 'string') throw new Error('Provide a valid string')
 		if (withSpacing) {
-			return _.split(' ')
+			return _.toLowerCase()
+				.split(' ')
 				.map((val: string) => val.charAt(0).toUpperCase() + val.slice(1))
 				.join(' ')
 				.replace(/ /g, '-')
 				.replace(/\//g, '-')
 				.replace(/\./g, '')
 		} else {
-			return _.split(' ')
+			return _.toLowerCase()
+				.split(' ')
 				.map((val: string) => val.charAt(0).toUpperCase() + val.slice(1))
 				.join(' ')
 				.replace(/\//g, '-')
