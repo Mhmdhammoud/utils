@@ -10,14 +10,14 @@ declare class Formatter {
      * // => 'Hello-World'
      * ```
      * */
-    toUpperFirst: (_: string | number, withSpacing?: boolean) => string;
+    toUpperFirst: (str: string | number) => string;
     /**
      * @remarks normalizes input to supported path and file name format.
      * Changes camelCase strings to kebab-case, replaces spaces with dash and keeps underscores. *
      * @param str - String needed to be modified
      * @returns formatted string
      */
-    camelToKebab: (str: string) => string;
+    camelToKebab: (str: string | number) => string;
     /**
      * @remarks obfuscates email address
      * @param email - email address to be obfuscated
@@ -39,7 +39,7 @@ declare class Formatter {
      * console.log(newSentence) // 'This Is A Sentence'
      * ```
      */
-    toUpperTitle: (sentence: string) => string;
+    toUpperTitle: (sentence: string | number) => string;
     /**
      * @remarks Generates a slug from a given string
      * @param title - string to be converted to slug
@@ -49,7 +49,7 @@ declare class Formatter {
      * formatter.slugify('Hello World') // => hello-world
      * ```
      * */
-    slugify: (title: string) => string;
+    slugify: (title: string | number) => string;
 }
 declare const formatter: Formatter;
 export default formatter;
