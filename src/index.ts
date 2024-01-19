@@ -1,2 +1,1 @@
-export {Crypto} from './lib'
-export {Formatter} from './lib'
+export {Crypto, Formatter, Colorful} from './lib'
