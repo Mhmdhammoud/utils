@@ -19,26 +19,15 @@ class Formatter {
          * // => 'Hello-World'
          * ```
          * */
-        this.toUpperFirst = (_, withSpacing = true) => {
-            if (typeof _ !== 'string')
+        this.toUpperFirst = (str) => {
+            if (typeof str !== 'string')
                 throw new Error('Provide a valid string');
-            if (withSpacing) {
-                return _.toLowerCase()
-                    .split(' ')
-                    .map((val) => val.charAt(0).toUpperCase() + val.slice(1))
-                    .join(' ')
-                    .replace(/ /g, '-')
-                    .replace(/\//g, '-')
-                    .replace(/\./g, '');
-            }
-            else {
-                return _.toLowerCase()
-                    .split(' ')
-                    .map((val) => val.charAt(0).toUpperCase() + val.slice(1))
-                    .join(' ')
-                    .replace(/\//g, '-')
-                    .replace(/\./g, '');
-            }
+            const formattedString = str
+                .toString()
+                .replace(/[^a-zA-Z0-9]+/g, '-')
+                .trim()
+                .toLowerCase();
+            return formattedString.charAt(0).toUpperCase() + formattedString.slice(1);
         };
         /**
          * @remarks normalizes input to supported path and file name format.
@@ -47,6 +36,9 @@ class Formatter {
          * @returns formatted string
          */
         this.camelToKebab = (str) => {
+            if (typeof str !== 'string') {
+                throw new Error('Invalid input. Please provide a valid string.');
+            }
             const STRING_DASHERIZE_REGEXP = /\s/g;
             const STRING_DECAMELIZE_REGEXP = /([a-z\d])([A-Z])/g;
             return str
@@ -96,14 +88,11 @@ class Formatter {
                 throw new Error('Provide a valid string');
             if (!sentence)
                 throw new Error('Provide a valid string');
-            const sanitizedSentence = sentence.replace(/[^a-zA-Z0-9]+/g, ' ');
-            const words = sanitizedSentence.split(' ');
-            const capitalizedWords = [];
-            for (let i = 0; i < words.length; i++) {
-                const word = words[i];
-                const capitalizedWord = word.charAt(0).toUpperCase() + word.slice(1);
-                capitalizedWords.push(capitalizedWord);
-            }
+            const sanitizedSentence = sentence.replace(/[^a-zA-Z\s]+/g, ' '); // Exclude numbers from the character class
+            const words = sanitizedSentence.split(/\s+/);
+            const capitalizedWords = words.map((word) => {
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            });
             return capitalizedWords.join(' ');
         };
         /**
@@ -119,28 +108,8 @@ class Formatter {
             if (typeof title !== 'string')
                 throw new Error('Provide a valid string');
             return title
-                .replace(/ /g, '-')
-                .replace(/%/g, '-')
-                .replace(/#/g, '-')
-                .replace(/\?/g, '-')
-                .replace(/,/g, '-')
-                .replace(/\//g, '-')
-                .replace(/\\/g, '-')
-                .replace(/\./g, '')
-                .replace(/'/g, '')
-                .replace(/"/g, '')
-                .replace(/\+/g, '-')
-                .replace(/\*/g, '-')
-                .replace(/\^/g, '-')
-                .replace(/@/g, '-')
-                .replace(/;/g, '-')
-                .replace(/:/g, '-')
-                .replace(/!/g, '-')
-                .replace(/&/g, '-')
-                .replace(/\$/g, '-')
-                .replace(/\(/g, '-')
-                .replace(/\)/g, '-')
-                .trim()
+                .replace(/[^\w\s]/g, '') // Remove non-alphanumeric characters
+                .replace(/\s+/g, '-') // Replace consecutive spaces with a single dash
                 .toLowerCase();
         };
     }
