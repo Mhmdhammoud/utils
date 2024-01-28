@@ -1,6 +1,6 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"description": "",
 	"main": "./dist/index.js",
 	"private": false,
@@ -39,6 +39,7 @@
 	"author": "Mhmdhammoud",
 	"license": "ISC",
 	"dependencies": {
-		"axios": "^1.4.0"
+		"axios": "^1.4.0",
+		"imagesloaded": "^5.0.0"
 	}
 }
