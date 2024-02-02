@@ -1,8 +1,18 @@
 # Changes
 
-## Version 1.0.5
+## Version 1.3.0
 
-### Added
+- Added toUpperTitle method that accepts a string and removes all non alphanumeric characters and capitalizes each letter of every first word
+
+```typescript
+import {Logger} from '@mhmdhammoud/meritt-utils'
+
+// Usage Example
+Logger.info('className', ' functionName', 'logMessage', 'userIp')
+// Available levels info warn error
+```
+
+## Version 1.0.5
 
 - Added toUpperTitle method that accepts a string and removes all non alphanumeric characters and capitalizes each letter of every first word
 
@@ -18,8 +28,6 @@ console : Hello World 99
 ```
 
 ## Version 1.0.4
-
-### Added
 
 - Added generateKeys method that returns public and private keys
 
@@ -38,13 +46,9 @@ console.log(response)
 
 ```
 
-### Fixes and Improvements
-
 - Checking for prime numbers discarding even and odd numbers and skips 6 iterations at a time until radical I
 
 ## Version 1.0.3
-
-### Added
 
 - Added Formatter class for manipulating strings
 
@@ -54,8 +58,6 @@ import {Formatter} from '@mhmdhammoud/meritt-utils'
 // Example of creating a product slug
 const slug = Formatter.slugify('My Product Name') // my-product-name
 ```
-
-### Fixes and Improvements
 
 - Fixed bug in Crypto class where encrypting a string with a key that is not a number would throw an error
 - Improved Crypto class to allow encrypting and decrypting numbers and objects
