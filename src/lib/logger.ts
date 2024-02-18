@@ -1,172 +1,151 @@
-import Winston, {Logger as WinstonLogger, LoggerOptions} from 'winston'
-import {WinstonConfiguaration} from '../config'
+import {Logger as PinoLogger, pino, stdTimeFunctions} from 'pino'
+import * as dotenv from 'dotenv'
+import pinoElastic from 'pino-elasticsearch'
+import {ElasticConfig, LOG_LEVEL, LogEvent} from '../types'
+
+dotenv.config()
 
 /**
- * Represents a log message with structured information.
+ * Pino logger backend - singleton
  */
-interface LogMessage {
-	/**
-	 * The name of the class that generated the log.
-	 */
-	className: string
+let pinoLogger: PinoLogger
 
-	/**
-	 * The name of the function that generated the log.
-	 */
-	functionName: string
-
-	/**
-	 * The log message text.
-	 */
-	logMessage: string
-
-	/**
-	 * The user's IP address associated with the log.
-	 */
-	userIp: string
-
-	/**
-	 * Additional data associated with the log.
-	 */
-	data?: Record<string, any>
+/**
+ * Creates a Pino logger instance with specified Elasticsearch configuration.
+ * @param elasticConfig - Optional Elasticsearch configuration.
+ * @returns The Pino logger instance.
+ */
+function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
+	if (!pinoLogger) {
+		if (isValidLogLevel(process.env.LOG_LEVEL)) {
+			const transports = []
+			if (process.env.NODE_ENV !== 'local' && process.env.NODE_ENV !== 'test') {
+				const esConfig: ElasticConfig = {
+					index: process.env.SERVER_NICKNAME,
+					node: process.env.ELASTICSEARCH_NODE,
+					auth: {
+						username: process.env.ELASTICSEARCH_USERNAME,
+						password: process.env.ELASTICSEARCH_PASSWORD,
+					},
+					flushInterval: 10000,
+				}
+				if (elasticConfig) {
+					Object.assign(esConfig, elasticConfig)
+				}
+				const esTransport = pinoElastic(esConfig)
+				transports.push(esTransport)
+			} else {
+				transports.push(
+					pino.destination({
+						minLength: 1024,
+						sync: true,
+					})
+				)
+			}
+			pinoLogger = pino(
+				{
+					level: process.env.LOG_LEVEL,
+					timestamp: stdTimeFunctions.isoTime.bind(stdTimeFunctions),
+				},
+				...transports
+			)
+		}
+	}
+	return pinoLogger
 }
 
 /**
- * Service for logging information, warnings, and errors using Winston.
+ * Checks if a given log level is valid.
+ * @param level - The log level to check.
+ * @returns Whether the log level is valid.
  */
-class LoggerService {
-	private logger: WinstonLogger
+export function isValidLogLevel(level: string): level is LOG_LEVEL {
+	if (!['error', 'warn', 'info', 'debug', 'trace'].includes(level)) {
+		throw new Error(
+			`Invalid log level "${level}": only error, warn, info, debug, trace are valid.`
+		)
+	}
+	return true
+}
+
+/**
+ * Logger Wrapper.
+ * Wraps a Pino logger instance and provides logging methods.
+ */
+class Logger {
+	private readonly _name: string
+	private readonly _logger: PinoLogger
 
 	/**
-	 * Creates an instance of LoggerService.
-	 * @param config - The configuration options for Winston logger.
+	 * Creates a new Logger instance with default configuration.
+	 * @param name - The name of the logger.
 	 */
-	constructor(config: LoggerOptions) {
-		this.logger = Winston.createLogger({
-			...config,
-			level: process.env.LOG_LEVEL,
+	constructor(name: string)
+
+	/**
+	 * Creates a new Logger instance with custom Elasticsearch configuration.
+	 * @param name - The name of the logger.
+	 * @param elasticConfig - Optional Elasticsearch configuration.
+	 */
+	constructor(name: string, elasticConfig?: ElasticConfig)
+
+	constructor(name: string, elasticConfig?: ElasticConfig) {
+		this._name = name
+		this._logger = getLogger(elasticConfig)
+	}
+
+	private log(logLevel: LOG_LEVEL, logEvent: LogEvent, ...args: unknown[]) {
+		this._logger[logLevel]({
+			component: this._name,
+			...logEvent,
+			detail: args,
 		})
-		if (process.env.NODE_ENV === 'local') {
-			this.logger.add(
-				new Winston.transports.Console({
-					level: 'info',
-					format: Winston.format.combine(
-						Winston.format.simple(),
-						Winston.format.colorize(),
-						Winston.format.printf(({level, message}) => {
-							return `[${level}]: ${JSON.stringify(message)}`
-							// Parse the message as JSON and include in the log
-						})
-					),
-				})
-			)
-		}
-
-		this.logger.level = process.env.LOG_LEVEL
-	}
-
-	/**
-	 * Logs an informational message.
-	 * @param className - The name of the class that generated the log.
-	 * @param functionName - The name of the function that generated the log.
-	 * @param logMessage - The log message text.
-	 * @param userIp - The user's IP address associated with the log.
-	 * @param data - Additional data associated with the log.
-	 */
-	info(
-		className: string,
-		functionName: string,
-		logMessage: string,
-		userIp: string
-	): void {
-		const message = this.createLogMessage(
-			className,
-			functionName,
-			logMessage,
-			userIp
-		)
-		this.log('info', message)
-	}
-
-	/**
-	 * Logs a warning message.
-	 * @param className - The name of the class that generated the log.
-	 * @param functionName - The name of the function that generated the log.
-	 * @param logMessage - The log message text.
-	 * @param userIp - The user's IP address associated with the log.
-	 * @param data - Additional data associated with the log.
-	 */
-	warn(
-		className: string,
-		functionName: string,
-		logMessage: string,
-		userIp: string
-	): void {
-		const message = this.createLogMessage(
-			className,
-			functionName,
-			logMessage,
-			userIp
-		)
-		this.log('warn', message)
 	}
 
 	/**
 	 * Logs an error message.
-	 * @param className - The name of the class that generated the log.
-	 * @param functionName - The name of the function that generated the log.
-	 * @param logMessage - The log message text.
-	 * @param userIp - The user's IP address associated with the log.
-	 * @param data - Additional data associated with the log.
+	 * @param logEvent - The event to log.
+	 * @param args - Additional arguments to include in the log.
 	 */
-	error(
-		className: string,
-		functionName: string,
-		logMessage: string,
-		userIp: string,
-		data: Object = {}
-	): void {
-		const message = this.createLogMessage(
-			className,
-			functionName,
-			logMessage,
-			userIp,
-			data
-		)
-		this.log('error', message)
+	error(logEvent: LogEvent, ...args: unknown[]) {
+		this.log('error', logEvent, ...args)
 	}
 
-	private createLogMessage(
-		className: string,
-		functionName: string,
-		logMessage: string,
-		userIp: string,
-		data: Record<string, any> = {}
-	): LogMessage {
-		return {
-			className,
-			functionName,
-			logMessage,
-			userIp,
-			data,
-		}
+	/**
+	 * Logs a warning message.
+	 * @param logEvent - The event to log.
+	 * @param args - Additional arguments to include in the log.
+	 */
+	warn(logEvent: LogEvent, ...args: unknown[]) {
+		this.log('warn', logEvent, ...args)
 	}
 
-	private log(level: string, logMessage: LogMessage): void {
-		this.logger.log({
-			level,
-			//@ts-ignore
-			message: logMessage,
-		})
-		process.on('unhandledRejection', (reason, promise) => {
-			this.logger.error('Unhandled Rejection at:', promise, 'reason:', reason)
-		})
+	/**
+	 * Logs an informational message.
+	 * @param logEvent - The event to log.
+	 * @param args - Additional arguments to include in the log.
+	 */
+	info(logEvent: LogEvent, ...args: unknown[]) {
+		this.log('info', logEvent, ...args)
+	}
 
-		process.on('uncaughtException', (err) => {
-			this.logger.error('Uncaught Exception:', err)
-		})
+	/**
+	 * Logs a debug message.
+	 * @param logEvent - The event to log.
+	 * @param args - Additional arguments to include in the log.
+	 */
+	debug(logEvent: LogEvent, ...args: unknown[]) {
+		this.log('debug', logEvent, ...args)
+	}
+
+	/**
+	 * Logs a trace message.
+	 * @param logEvent - The event to log.
+	 * @param args - Additional arguments to include in the log.
+	 */
+	trace(logEvent: LogEvent, ...args: unknown[]) {
+		this.log('trace', logEvent, ...args)
 	}
 }
 
-const Logger = new LoggerService(WinstonConfiguaration)
 export default Logger
