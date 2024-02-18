@@ -1,5 +1,9 @@
 # Changes
 
+## Version 1.4.0
+
+- Changed winston logger to Pino logger to improve performance and reduce memory usage
+
 ## Version 1.3.0
 
 - Added toUpperTitle method that accepts a string and removes all non alphanumeric characters and capitalizes each letter of every first word
