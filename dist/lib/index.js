@@ -15,4 +15,4 @@ Object.defineProperty(exports, "Colorful", { enumerable: true, get: function () 
 var imagefull_1 = require("./imagefull");
 Object.defineProperty(exports, "ImageFull", { enumerable: true, get: function () { return __importDefault(imagefull_1).default; } });
 var logger_1 = require("./logger");
-Object.defineProperty(exports, "Logger", { enumerable: true, get: function () { return __importDefault(logger_1).default; } });
+Object.defineProperty(exports, "Logger", { enumerable: true, get: function () { return logger_1.Logger; } });

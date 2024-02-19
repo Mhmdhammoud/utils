@@ -15,3 +15,6 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./lib"), exports);
+const logger_1 = require("./lib/logger");
+const logger = new logger_1.Logger('Name');
+logger.info({ code: 'E293', msg: 'New log' }, { what: 'what' });

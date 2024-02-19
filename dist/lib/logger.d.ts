@@ -1,58 +1,39 @@
-import { ElasticConfig, LOG_LEVEL, LogEvent } from '../types';
+import { Logger as PinoLogger } from 'pino';
 /**
- * Checks if a given log level is valid.
- * @param level - The log level to check.
- * @returns Whether the log level is valid.
+ * Log levels
  */
+export type LOG_LEVEL = 'error' | 'warn' | 'info' | 'debug' | 'trace';
+export interface LogEvent {
+    code: string;
+    msg: string;
+}
+/**
+ * Pino logger backend - singleton
+ */
+export declare let pinoLogger: PinoLogger;
+/**
+ * Create pino once
+ */
+export declare function getLogger(): PinoLogger<never>;
 export declare function isValidLogLevel(level: string): level is LOG_LEVEL;
 /**
- * Logger Wrapper.
- * Wraps a Pino logger instance and provides logging methods.
+ * Logger Wrapper
  */
-declare class Logger {
+export declare class Logger {
     private readonly _name;
     private readonly _logger;
     /**
-     * Creates a new Logger instance with default configuration.
-     * @param name - The name of the logger.
+     * Create Logger Wrapper
+     * @param name Loggers related component name
      */
     constructor(name: string);
-    /**
-     * Creates a new Logger instance with custom Elasticsearch configuration.
-     * @param name - The name of the logger.
-     * @param elasticConfig - Optional Elasticsearch configuration.
-     */
-    constructor(name: string, elasticConfig?: ElasticConfig);
     private log;
     /**
-     * Logs an error message.
-     * @param logEvent - The event to log.
-     * @param args - Additional arguments to include in the log.
+     * Logger API
      */
     error(logEvent: LogEvent, ...args: unknown[]): void;
-    /**
-     * Logs a warning message.
-     * @param logEvent - The event to log.
-     * @param args - Additional arguments to include in the log.
-     */
     warn(logEvent: LogEvent, ...args: unknown[]): void;
-    /**
-     * Logs an informational message.
-     * @param logEvent - The event to log.
-     * @param args - Additional arguments to include in the log.
-     */
     info(logEvent: LogEvent, ...args: unknown[]): void;
-    /**
-     * Logs a debug message.
-     * @param logEvent - The event to log.
-     * @param args - Additional arguments to include in the log.
-     */
     debug(logEvent: LogEvent, ...args: unknown[]): void;
-    /**
-     * Logs a trace message.
-     * @param logEvent - The event to log.
-     * @param args - Additional arguments to include in the log.
-     */
     trace(logEvent: LogEvent, ...args: unknown[]): void;
 }
-export default Logger;
