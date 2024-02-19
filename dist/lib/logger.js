@@ -22,32 +22,63 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Logger = exports.isValidLogLevel = exports.getLogger = exports.pinoLogger = void 0;
+exports.isValidLogLevel = void 0;
 const pino_1 = require("pino");
 const dotenv = __importStar(require("dotenv"));
+const pino_elasticsearch_1 = __importDefault(require("pino-elasticsearch"));
 dotenv.config();
 /**
- * Create pino once
+ * Pino logger backend - singleton
  */
-function getLogger() {
-    if (!exports.pinoLogger) {
+let pinoLogger;
+/**
+ * Creates a Pino logger instance with specified Elasticsearch configuration.
+ * @param elasticConfig - Optional Elasticsearch configuration.
+ * @returns The Pino logger instance.
+ */
+function getLogger(elasticConfig) {
+    if (!pinoLogger) {
         if (isValidLogLevel(process.env.LOG_LEVEL)) {
-            exports.pinoLogger = (0, pino_1.pino)({
+            const transports = [];
+            if (process.env.NODE_ENV !== 'local' && process.env.NODE_ENV !== 'test') {
+                const esConfig = {
+                    index: process.env.SERVER_NICKNAME,
+                    node: process.env.ELASTICSEARCH_NODE,
+                    auth: {
+                        username: process.env.ELASTICSEARCH_USERNAME,
+                        password: process.env.ELASTICSEARCH_PASSWORD,
+                    },
+                    flushInterval: 10000,
+                };
+                if (elasticConfig) {
+                    Object.assign(esConfig, elasticConfig);
+                }
+                const esTransport = (0, pino_elasticsearch_1.default)(esConfig);
+                transports.push(esTransport);
+            }
+            else {
+                transports.push(pino_1.pino.destination({
+                    minLength: 1024,
+                    sync: true,
+                }));
+            }
+            pinoLogger = (0, pino_1.pino)({
                 level: process.env.LOG_LEVEL,
-                /** TODO: Caution: any sort of formatted time will significantly slow down Pino's performance.
-                 * Can un-formatted time be used here? Maybe converted in Kibana import?
-                 */
                 timestamp: pino_1.stdTimeFunctions.isoTime.bind(pino_1.stdTimeFunctions),
-            }, pino_1.pino.destination({
-                minLength: 0,
-                sync: false,
-            }));
+            }, ...transports);
         }
     }
-    return exports.pinoLogger;
+    return pinoLogger;
 }
-exports.getLogger = getLogger;
+/**
+ * Checks if a given log level is valid.
+ * @param level - The log level to check.
+ * @returns Whether the log level is valid.
+ */
 function isValidLogLevel(level) {
     if (!['error', 'warn', 'info', 'debug', 'trace'].includes(level)) {
         throw new Error(`Invalid log level "${level}": only error, warn, info, debug, trace are valid.`);
@@ -56,16 +87,13 @@ function isValidLogLevel(level) {
 }
 exports.isValidLogLevel = isValidLogLevel;
 /**
- * Logger Wrapper
+ * Logger Wrapper.
+ * Wraps a Pino logger instance and provides logging methods.
  */
 class Logger {
-    /**
-     * Create Logger Wrapper
-     * @param name Loggers related component name
-     */
-    constructor(name) {
+    constructor(name, elasticConfig) {
         this._name = name;
-        this._logger = getLogger();
+        this._logger = getLogger(elasticConfig);
     }
     log(logLevel, logEvent, ...args) {
         this._logger[logLevel]({
@@ -75,22 +103,44 @@ class Logger {
         });
     }
     /**
-     * Logger API
+     * Logs an error message.
+     * @param logEvent - The event to log.
+     * @param args - Additional arguments to include in the log.
      */
     error(logEvent, ...args) {
         this.log('error', logEvent, ...args);
     }
+    /**
+     * Logs a warning message.
+     * @param logEvent - The event to log.
+     * @param args - Additional arguments to include in the log.
+     */
     warn(logEvent, ...args) {
         this.log('warn', logEvent, ...args);
     }
+    /**
+     * Logs an informational message.
+     * @param logEvent - The event to log.
+     * @param args - Additional arguments to include in the log.
+     */
     info(logEvent, ...args) {
         this.log('info', logEvent, ...args);
     }
+    /**
+     * Logs a debug message.
+     * @param logEvent - The event to log.
+     * @param args - Additional arguments to include in the log.
+     */
     debug(logEvent, ...args) {
         this.log('debug', logEvent, ...args);
     }
+    /**
+     * Logs a trace message.
+     * @param logEvent - The event to log.
+     * @param args - Additional arguments to include in the log.
+     */
     trace(logEvent, ...args) {
         this.log('trace', logEvent, ...args);
     }
 }
-exports.Logger = Logger;
+exports.default = Logger;
