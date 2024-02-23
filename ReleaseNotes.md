@@ -1,5 +1,9 @@
 # Changes
 
+## Version 1.4.1
+
+- Json stringify the log message if its being pushed to Kibana
+
 ## Version 1.4.0
 
 - Changed winston logger to Pino logger to improve performance and reduce memory usage
