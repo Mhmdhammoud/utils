@@ -1,7 +1,7 @@
 import {Logger as PinoLogger, pino, stdTimeFunctions} from 'pino'
 import * as dotenv from 'dotenv'
-import pinoElastic from 'pino-elasticsearch'
-import {ElasticConfig, LOG_LEVEL, LogEvent} from '../types'
+import pinoElastic, {Options as ElasticConfig} from 'pino-elasticsearch'
+import {LOG_LEVEL, LogEvent} from '../types'
 
 dotenv.config()
 
@@ -27,21 +27,25 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 						username: process.env.ELASTICSEARCH_USERNAME,
 						password: process.env.ELASTICSEARCH_PASSWORD,
 					},
-					flushInterval: 10000,
+					flushInterval: 1000,
+					'flush-bytes': 1000,
 				}
 				if (elasticConfig) {
 					Object.assign(esConfig, elasticConfig)
 				}
+
 				const esTransport = pinoElastic(esConfig)
+
 				transports.push(esTransport)
 			} else {
 				transports.push(
 					pino.destination({
 						minLength: 1024,
-						sync: true,
+						sync: false,
 					})
 				)
 			}
+
 			pinoLogger = pino(
 				{
 					level: process.env.LOG_LEVEL,
@@ -95,10 +99,17 @@ class Logger {
 	}
 
 	private log(logLevel: LOG_LEVEL, logEvent: LogEvent, ...args: unknown[]) {
+		let detail
+		if (process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test') {
+			detail = args
+		} else {
+			//@ts-ignore
+			detail = JSON.stringify(...args)
+		}
 		this._logger[logLevel]({
 			component: this._name,
 			...logEvent,
-			detail: args,
+			detail,
 		})
 	}
 
