@@ -11,7 +11,7 @@ jobs:
         with:
           node-version: 16
       - run: npm ci
-      - run: npm run types
+      - run: npm run test:types
   notify:
     needs: [type-check]
     runs-on: ubuntu-latest
