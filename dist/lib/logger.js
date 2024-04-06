@@ -52,7 +52,8 @@ function getLogger(elasticConfig) {
                         username: process.env.ELASTICSEARCH_USERNAME,
                         password: process.env.ELASTICSEARCH_PASSWORD,
                     },
-                    flushInterval: 10000,
+                    flushInterval: 1000,
+                    'flush-bytes': 1000,
                 };
                 if (elasticConfig) {
                     Object.assign(esConfig, elasticConfig);
@@ -62,8 +63,8 @@ function getLogger(elasticConfig) {
             }
             else {
                 transports.push(pino_1.pino.destination({
-                    minLength: 1024,
-                    sync: true,
+                    minLength: 128,
+                    sync: false,
                 }));
             }
             pinoLogger = (0, pino_1.pino)({
@@ -96,10 +97,18 @@ class Logger {
         this._logger = getLogger(elasticConfig);
     }
     log(logLevel, logEvent, ...args) {
+        let detail;
+        if (process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test') {
+            detail = args;
+        }
+        else {
+            //@ts-ignore
+            detail = JSON.stringify(...args);
+        }
         this._logger[logLevel]({
             component: this._name,
             ...logEvent,
-            detail: args,
+            detail,
         });
     }
     /**

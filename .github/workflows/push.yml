@@ -25,5 +25,5 @@ jobs:
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: ${{ github.event.head_commit.message }} ${{ github.job }} job of ${{ github.repository }} has ${{ job.status }}
           body: ${{ github.job }} job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ job.status }}
-          to: mohammad.hammoud.lb@hotmail.com,steef12009@gmail.com,sawwas.omar@gmail.com
+          to: mohammad.hammoud.lb@hotmail.com,steef12009@gmail.com
           from: Github Action
