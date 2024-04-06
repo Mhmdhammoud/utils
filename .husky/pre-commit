@@ -45,7 +45,7 @@ echo -ne '\n'
 
 echo -e "${yellow}Running types...${clear}"
 echo -ne '\n'
-npm run types
+npm run test:types
 echo -ne '\n'
 
 echo -e "${green}types passed...${clear} ✅"

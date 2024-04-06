@@ -40,7 +40,7 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 			} else {
 				transports.push(
 					pino.destination({
-						minLength: 1024,
+						minLength: 128,
 						sync: false,
 					})
 				)

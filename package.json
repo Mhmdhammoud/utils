@@ -1,6 +1,6 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.4.2",
+	"version": "1.5.0",
 	"description": "",
 	"main": "./dist/index.js",
 	"private": false,
@@ -13,11 +13,11 @@
 		"access": "public"
 	},
 	"scripts": {
-		"dev-ts": "ts-node-dev --respawn --transpile-only src/index.ts  | pino-pretty",
+		"start:dev": "ts-node-dev --respawn --transpile-only src/index.ts  | pino-pretty",
 		"dev": "nodemon ./dist/index.js",
 		"watch": "tsc --watch",
 		"build": "tsc",
-		"types": "tsc --noemit",
+		"test:types": "tsc --noemit",
 		"prepare": "husky install",
 		"lint": "eslint src --fix",
 		"prepublish": "npm run build",
