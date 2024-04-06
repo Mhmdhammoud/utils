@@ -1,4 +1,5 @@
-import { ElasticConfig, LOG_LEVEL, LogEvent } from '../types';
+import { Options as ElasticConfig } from 'pino-elasticsearch';
+import { LOG_LEVEL, LogEvent } from '../types';
 /**
  * Checks if a given log level is valid.
  * @param level - The log level to check.
