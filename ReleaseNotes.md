@@ -1,5 +1,60 @@
 # Changes
 
+## Version 1.5.3
+
+### Logger Improvements - Critical Bug Fixes & Production Reliability
+
+#### Critical Fixes
+
+- **Fixed broken JSON.stringify**: Corrected production log serialization from `JSON.stringify(...args)` to `JSON.stringify(args)` - previously only stringified first argument
+- **Fixed silent failures**: Logger now throws clear errors when `LOG_LEVEL` is invalid instead of silently failing with undefined logger
+- **Fixed return type mismatch**: `getLogger()` now properly returns `PinoLogger` type with explicit error handling
+- **Fixed buffer configuration**: Corrected inconsistent buffer settings to match tests (`minLength: 1024, sync: true`)
+- **Fixed race condition**: Event listener now registered before calling `.end()` to prevent missed flush events on shutdown
+
+#### Environment Variable Validation
+
+- **Added Elasticsearch validation**: Validates required env vars (`ELASTICSEARCH_NODE`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD`, `SERVER_NICKNAME`) with clear error messages
+- **Added integer parsing validation**: All numeric env vars now validated to prevent `NaN` values from breaking configuration
+- **Validates positive numbers**: Ensures flush intervals, buffer sizes, retries, and timeouts are positive integers
+
+#### Configurable Settings (New Environment Variables)
+
+- `ES_FLUSH_INTERVAL_MS` - How often to send logs (default: 2000ms = 2 seconds)
+- `ES_FLUSH_BYTES` - Buffer size before forcing flush (default: 102400 = 100KB)
+- `ES_MAX_RETRIES` - Number of retry attempts on failure (default: 3)
+- `ES_REQUEST_TIMEOUT_MS` - Request timeout before retry (default: 30000ms = 30 seconds)
+
+#### Reliability Improvements
+
+- **Error monitoring**: Elasticsearch transport errors now logged to console instead of silent failure
+  - `error` event: Connection errors with clear messaging
+  - `insertError` event: Document indexing failures
+- **Graceful shutdown**: Properly flushes buffered logs before process exit
+  - Handles `SIGTERM` and `SIGINT` signals
+  - 5-second timeout prevents hanging forever
+  - Proper async/await handling to ensure flush completes
+- **Auto-reconnection**: `sniffOnConnectionFault: true` enables automatic reconnection when Elasticsearch nodes fail
+- **Retry logic**: Configurable retry attempts with timeout for failed requests
+
+#### Type Safety
+
+- **Removed `any` types**: All configurations now use proper TypeScript interfaces
+- **Extended ElasticConfig interface**: Added proper types for `maxRetries`, `requestTimeout`, `sniffOnConnectionFault`, and buffer settings
+- **Full compile-time validation**: Type system now validates all configuration options
+
+#### Performance
+
+- **Optimized flush settings**: Default 2-second interval with 100KB buffer balances real-time logs with reliability
+- **Reduced network overhead**: Larger buffer prevents excessive network calls during high-traffic periods
+
+#### Migration Notes
+
+- All changes are backward compatible
+- Default values ensure existing deployments work without changes
+- Optional environment variables allow fine-tuning per environment
+- No breaking changes to the Logger API
+
 ## Version 1.4.1
 
 - Json stringify the log message if its being pushed to Kibana
