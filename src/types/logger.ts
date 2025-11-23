@@ -46,4 +46,21 @@ export interface ElasticConfig {
 	 * The interval (in milliseconds) at which logs are flushed to Elasticsearch.
 	 */
 	flushInterval?: number
+	/**
+	 * The number of bytes to buffer before flushing to Elasticsearch.
+	 */
+	'flush-bytes'?: number
+	/**
+	 * Maximum number of retries for failed Elasticsearch requests.
+	 */
+	maxRetries?: number
+	/**
+	 * Request timeout in milliseconds before considering a request failed.
+	 */
+	requestTimeout?: number
+	/**
+	 * Whether to sniff for additional Elasticsearch nodes on connection fault.
+	 * Enables automatic reconnection when a node fails.
+	 */
+	sniffOnConnectionFault?: boolean
 }
