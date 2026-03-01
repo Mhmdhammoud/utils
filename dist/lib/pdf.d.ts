@@ -9,7 +9,7 @@ declare class Pdf {
      * // => 'Hello-World'
      * ```
      * */
-    getBase64Images: (url: string) => string;
+    getBase64Images: (_url: string) => string;
 }
 declare const pdf: Pdf;
 export default pdf;

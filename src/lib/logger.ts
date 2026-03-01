@@ -1,7 +1,7 @@
-import {Logger as PinoLogger, pino, stdTimeFunctions} from 'pino'
+import { Logger as PinoLogger, pino, stdTimeFunctions } from 'pino'
 import * as dotenv from 'dotenv'
-import pinoElastic, {Options as PinoElasticOptions} from 'pino-elasticsearch'
-import {LOG_LEVEL, LogEvent, ElasticConfig} from '../types'
+import { createElasticTransport } from './elastic-transport'
+import { LOG_LEVEL, LogEvent, ElasticConfig } from '../types'
 
 dotenv.config()
 
@@ -13,7 +13,7 @@ let pinoLogger: PinoLogger
 /**
  * Elasticsearch transport instance - kept for cleanup
  */
-let esTransport: ReturnType<typeof pinoElastic> | null = null
+let esTransport: NodeJS.ReadWriteStream | null = null
 
 /**
  * Flag to track if shutdown handlers are registered
@@ -25,8 +25,13 @@ let shutdownHandlersRegistered = false
  * @throws Error if required environment variables are missing.
  */
 function validateElasticsearchEnv(): void {
-	const required = ['ELASTICSEARCH_NODE', 'ELASTICSEARCH_USERNAME', 'ELASTICSEARCH_PASSWORD', 'SERVER_NICKNAME']
-	const missing = required.filter(key => !process.env[key])
+	const required = [
+		'ELASTICSEARCH_NODE',
+		'ELASTICSEARCH_USERNAME',
+		'ELASTICSEARCH_PASSWORD',
+		'SERVER_NICKNAME',
+	]
+	const missing = required.filter((key) => !process.env[key])
 
 	if (missing.length > 0) {
 		throw new Error(
@@ -43,7 +48,11 @@ function validateElasticsearchEnv(): void {
  * @returns The parsed integer or the default value.
  * @throws Error if the value is not a valid number.
  */
-function parseIntEnv(envValue: string | undefined, defaultValue: number, varName: string): number {
+function parseIntEnv(
+	envValue: string | undefined,
+	defaultValue: number,
+	varName: string
+): number {
 	if (!envValue) {
 		return defaultValue
 	}
@@ -177,8 +186,8 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 				index: process.env.SERVER_NICKNAME,
 				node: process.env.ELASTICSEARCH_NODE,
 				auth: {
-					username: process.env.ELASTICSEARCH_USERNAME as string,
-					password: process.env.ELASTICSEARCH_PASSWORD as string,
+					username: process.env.ELASTICSEARCH_USERNAME,
+					password: process.env.ELASTICSEARCH_PASSWORD,
 				},
 				// Configurable flush settings
 				flushInterval: flushIntervalMs,
@@ -193,18 +202,19 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 				Object.assign(esConfig, elasticConfig)
 			}
 
-			// Create transport and store reference for cleanup
-			// Cast to PinoElasticOptions since our ElasticConfig includes ClientOptions properties
-			esTransport = pinoElastic(esConfig as PinoElasticOptions)
+			// Create transport with connection lifecycle fix (pino-elasticsearch #140)
+			esTransport = createElasticTransport(esConfig)
 
 			// Handle Elasticsearch connection errors
-			esTransport.on('error', (err) => {
+			esTransport.on('error', (err: Error) => {
 				console.error('[Logger] Elasticsearch transport error:', err.message)
-				console.error('[Logger] Logs may not be reaching Kibana. Check Elasticsearch connection.')
+				console.error(
+					'[Logger] Logs may not be reaching Kibana. Check Elasticsearch connection.'
+				)
 			})
 
 			// Handle insert errors (document indexing failures)
-			esTransport.on('insertError', (err) => {
+			esTransport.on('insertError', (err: Error) => {
 				console.error('[Logger] Elasticsearch insert error:', err.message)
 				console.error('[Logger] Some logs failed to index to Elasticsearch.')
 			})

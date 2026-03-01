@@ -1,4 +1,4 @@
-import {Formatter} from '../lib'
+import { Formatter } from '../lib'
 
 describe('Formatter', () => {
 	describe('toUpperFirst method', () => {

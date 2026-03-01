@@ -1,5 +1,5 @@
-import Logger, {isValidLogLevel} from '../lib/logger'
-import {pino} from 'pino'
+import Logger, { isValidLogLevel } from '../lib/logger'
+import { pino } from 'pino'
 
 jest.mock('pino')
 

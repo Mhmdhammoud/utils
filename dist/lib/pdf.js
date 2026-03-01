@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+// import { AxiosInstance } from '../utilities'
 /*
      Author : Mustafa Halabi https://github.com/mustafahalabi
      Date : 2023-06-24
@@ -18,7 +19,7 @@ class Pdf {
          * // => 'Hello-World'
          * ```
          * */
-        this.getBase64Images = (url) => {
+        this.getBase64Images = (_url) => {
             return '';
         };
     }
