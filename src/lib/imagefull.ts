@@ -28,7 +28,7 @@ class ImageFull {
 		return new Promise((resolve) => {
 			imagesLoaded(
 				document.querySelectorAll(selector),
-				{background: true},
+				{ background: true },
 				(event) => {
 					resolve(event)
 				}

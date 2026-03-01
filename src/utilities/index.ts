@@ -1,1 +1,1 @@
-export {default as AxiosInstance} from './axios'
+export { default as AxiosInstance } from './axios'

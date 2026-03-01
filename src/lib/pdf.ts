@@ -1,4 +1,4 @@
-import {AxiosInstance} from '../utilities'
+// import { AxiosInstance } from '../utilities'
 /*
 	 Author : Mustafa Halabi https://github.com/mustafahalabi
 	 Date : 2023-06-24
@@ -16,7 +16,7 @@ class Pdf {
 	 * // => 'Hello-World'
 	 * ```
 	 * */
-	getBase64Images = (url: string): string => {
+	getBase64Images = (_url: string): string => {
 		return ''
 	}
 }
