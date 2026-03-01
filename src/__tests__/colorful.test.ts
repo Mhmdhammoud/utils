@@ -1,4 +1,4 @@
-import {Colorful} from '../lib'
+import { Colorful } from '../lib'
 
 describe('Colorful Class', () => {
 	describe('rgbToHex method', () => {

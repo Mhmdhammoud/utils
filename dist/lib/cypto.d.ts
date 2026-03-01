@@ -63,7 +63,7 @@ declare class Crypto {
      * crypto.generateKeys()
      * ```
      * */
-    generateKeys: () => Record<'publicKey' | 'privateKey', number>;
+    generateKeys: () => Record<"publicKey" | "privateKey", number>;
     /**
      *
      * @param publicKey - The public key number
