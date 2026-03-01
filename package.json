@@ -1,6 +1,6 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.5.3",
+	"version": "1.5.4",
 	"description": "",
 	"main": "./dist/index.js",
 	"private": false,
@@ -44,7 +44,7 @@
 	"author": "Mhmdhammoud",
 	"license": "ISC",
 	"dependencies": {
-		"@elastic/elasticsearch": "^9.3.2",
+		"@elastic/elasticsearch": "^8.17.0",
 		"axios": "^1.4.0",
 		"dotenv": "^16.4.1",
 		"imagesloaded": "^5.0.0",
