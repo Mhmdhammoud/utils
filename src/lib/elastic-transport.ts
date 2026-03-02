@@ -107,7 +107,7 @@ function initializeBulkHandler(
 		datasource: splitter as unknown as Readable,
 		flushBytes: opts.flushBytes ?? opts['flush-bytes'] ?? 1000,
 		flushInterval: opts.flushInterval ?? opts['flush-interval'] ?? 3000,
-		refreshOnCompletion: indexName(),
+		refreshOnCompletion: false,
 		onDocument(doc: unknown) {
 			const d = doc as LogDocument
 			const date = d.time ?? d['@timestamp'] ?? new Date().toISOString()
