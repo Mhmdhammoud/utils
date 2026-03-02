@@ -1,9 +1,9 @@
-import {Logger as PinoLogger, pino, stdTimeFunctions} from 'pino'
+import { Logger as PinoLogger, pino, stdTimeFunctions } from 'pino'
 import * as dotenv from 'dotenv'
-import {hostname} from 'os'
-import {createElasticTransport} from './elastic-transport'
-import {getTraceContext} from './trace-store'
-import {LOG_LEVEL, LogEvent, ElasticConfig} from '../types'
+import { hostname } from 'os'
+import { createElasticTransport } from './elastic-transport'
+import { getTraceContext } from './trace-store'
+import { LOG_LEVEL, LogEvent, ElasticConfig } from '../types'
 
 dotenv.config()
 
@@ -228,9 +228,17 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 			})
 
 			// Handle insert errors (document indexing failures)
-			esTransport.on('insertError', (err: Error) => {
+			esTransport.on('insertError', (err: Error & { document?: unknown }) => {
 				console.error('[Logger] Elasticsearch insert error:', err.message)
 				console.error('[Logger] Some logs failed to index to Elasticsearch.')
+				if (err.document) {
+					const docStr = JSON.stringify(err.document)
+					const preview =
+						docStr.length > 500
+							? `${docStr.substring(0, 500)}... (truncated)`
+							: docStr
+					console.error('[Logger] Dropped document preview:', preview)
+				}
 			})
 
 			// Log successful connection (for debugging)
@@ -308,42 +316,52 @@ class Logger {
 	 * - Structured: Single plain object flattened as top-level snake_case fields (Kibana filterable)
 	 * - Trace: trace.id when running inside runWithTrace
 	 */
-	private buildPayload(logLevel: LOG_LEVEL, logEvent: LogEvent, args: unknown[]) {
+	private buildPayload(
+		logLevel: LOG_LEVEL,
+		logEvent: LogEvent,
+		args: unknown[]
+	) {
 		const isLocal =
 			process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test'
 
-		// ECS-aligned fields for Kibana Discover, Lens, alerts
+		// Defensive: missing Logs constant (undefined) crashes on logEvent.code
+		const event =
+			logEvent && typeof logEvent === 'object' && 'code' in logEvent
+				? logEvent
+				: { code: 'UNKNOWN', msg: 'Missing or invalid log event constant' }
+
+		// ECS-aligned fields for Kibana (flat names to avoid mapping conflicts with existing indices)
 		const ecs: Record<string, unknown> = {
-			'log.level': logLevel,
-			'log.logger': this._name,
-			'event.code': logEvent.code,
-			message: logEvent.msg,
-			service: {
-				name: process.env.SERVER_NICKNAME ?? 'unknown',
-				environment: process.env.NODE_ENV ?? 'development',
-			},
-			host: {
-				name: hostname(),
-			},
+			log_level: logLevel,
+			log_logger: this._name,
+			event_code: event.code,
+			message: event.msg,
+			service_name: process.env.SERVER_NICKNAME ?? 'unknown',
+			service_environment: process.env.NODE_ENV ?? 'development',
+			host_name: hostname(),
 		}
 
 		// Trace context for request-scoped correlation
 		const trace = getTraceContext()
 		if (trace) {
-			;(ecs as Record<string, unknown>).trace = {id: trace.traceId}
+			ecs.trace_id = trace.traceId
 		}
 
 		// Structured context: flatten single plain object as top-level fields
+		// Sanitize values to avoid ES mapping conflicts (e.g. Error objects → serializable shape)
 		let detail: unknown
 		if (
 			args.length === 1 &&
 			isPlainObject(args[0]) &&
 			Object.keys(args[0]).length > 0
 		) {
-			const obj = args[0] as Record<string, unknown>
+			const obj = args[0]
 			for (const [k, v] of Object.entries(obj)) {
 				const key = toSnakeCase(k)
-				;(ecs as Record<string, unknown>)[key] = v
+				ecs[key] =
+					v instanceof Error
+						? { message: v.message, type: v.constructor.name }
+						: v
 			}
 		} else {
 			detail = isLocal ? args : JSON.stringify(args)
@@ -353,8 +371,8 @@ class Logger {
 		const base: Record<string, unknown> = {
 			...ecs,
 			component: this._name,
-			code: logEvent.code,
-			msg: logEvent.msg,
+			code: event.code,
+			msg: event.msg,
 		}
 		if (detail !== undefined) {
 			base.detail = detail
@@ -431,7 +449,7 @@ class Logger {
 			const result = await fn()
 			const durationMs = Date.now() - start
 			const payload = this.buildPayload('info', logEvent, [
-				{...context, duration_ms: durationMs, success: true},
+				{ ...context, duration_ms: durationMs, success: true },
 			])
 			this._logger.info(payload)
 			return result
@@ -439,10 +457,10 @@ class Logger {
 			const durationMs = Date.now() - start
 			const errObj =
 				error instanceof Error
-					? {error_message: error.message, error_type: error.constructor.name}
+					? { error_message: error.message, error_type: error.constructor.name }
 					: {}
 			const payload = this.buildPayload('error', logEvent, [
-				{...context, ...errObj, duration_ms: durationMs, success: false},
+				{ ...context, ...errObj, duration_ms: durationMs, success: false },
 			])
 			this._logger.error(payload)
 			throw error

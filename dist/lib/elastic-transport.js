@@ -56,7 +56,7 @@ function initializeBulkHandler(opts, client, splitter) {
         datasource: splitter,
         flushBytes: (_e = (_d = opts.flushBytes) !== null && _d !== void 0 ? _d : opts['flush-bytes']) !== null && _e !== void 0 ? _e : 1000,
         flushInterval: (_g = (_f = opts.flushInterval) !== null && _f !== void 0 ? _f : opts['flush-interval']) !== null && _g !== void 0 ? _g : 3000,
-        refreshOnCompletion: indexName(),
+        refreshOnCompletion: false,
         onDocument(doc) {
             var _a, _b;
             const d = doc;

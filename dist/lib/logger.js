@@ -208,6 +208,11 @@ function getLogger(elasticConfig) {
             esTransport.on('insertError', (err) => {
                 console.error('[Logger] Elasticsearch insert error:', err.message);
                 console.error('[Logger] Some logs failed to index to Elasticsearch.');
+                if (err.document) {
+                    const docStr = JSON.stringify(err.document);
+                    const preview = docStr.length > 500 ? `${docStr.substring(0, 500)}... (truncated)` : docStr;
+                    console.error('[Logger] Dropped document preview:', preview);
+                }
             });
             // Log successful connection (for debugging)
             esTransport.on('insert', () => {
@@ -259,27 +264,27 @@ class Logger {
     buildPayload(logLevel, logEvent, args) {
         var _a, _b;
         const isLocal = process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test';
-        // ECS-aligned fields for Kibana Discover, Lens, alerts
+        // Defensive: missing Logs constant (undefined) crashes on logEvent.code
+        const event = logEvent && typeof logEvent === 'object' && 'code' in logEvent
+            ? logEvent
+            : { code: 'UNKNOWN', msg: 'Missing or invalid log event constant' };
+        // ECS-aligned fields for Kibana (flat names to avoid mapping conflicts with existing indices)
         const ecs = {
-            'log.level': logLevel,
-            'log.logger': this._name,
-            'event.code': logEvent.code,
-            message: logEvent.msg,
-            service: {
-                name: (_a = process.env.SERVER_NICKNAME) !== null && _a !== void 0 ? _a : 'unknown',
-                environment: (_b = process.env.NODE_ENV) !== null && _b !== void 0 ? _b : 'development',
-            },
-            host: {
-                name: (0, os_1.hostname)(),
-            },
+            log_level: logLevel,
+            log_logger: this._name,
+            event_code: event.code,
+            message: event.msg,
+            service_name: (_a = process.env.SERVER_NICKNAME) !== null && _a !== void 0 ? _a : 'unknown',
+            service_environment: (_b = process.env.NODE_ENV) !== null && _b !== void 0 ? _b : 'development',
+            host_name: (0, os_1.hostname)(),
         };
         // Trace context for request-scoped correlation
         const trace = (0, trace_store_1.getTraceContext)();
         if (trace) {
-            ;
-            ecs.trace = { id: trace.traceId };
+            ecs.trace_id = trace.traceId;
         }
         // Structured context: flatten single plain object as top-level fields
+        // Sanitize values to avoid ES mapping conflicts (e.g. Error objects → serializable shape)
         let detail;
         if (args.length === 1 &&
             isPlainObject(args[0]) &&
@@ -287,7 +292,10 @@ class Logger {
             const obj = args[0];
             for (const [k, v] of Object.entries(obj)) {
                 const key = toSnakeCase(k);
-                ecs[key] = v;
+                ecs[key] =
+                    v instanceof Error
+                        ? { message: v.message, type: v.constructor.name }
+                        : v;
             }
         }
         else {
@@ -297,8 +305,8 @@ class Logger {
         const base = {
             ...ecs,
             component: this._name,
-            code: logEvent.code,
-            msg: logEvent.msg,
+            code: event.code,
+            msg: event.msg,
         };
         if (detail !== undefined) {
             base.detail = detail;

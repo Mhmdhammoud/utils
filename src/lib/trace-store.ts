@@ -1,5 +1,5 @@
-import {AsyncLocalStorage} from 'async_hooks'
-import {randomUUID} from 'crypto'
+import { AsyncLocalStorage } from 'async_hooks'
+import { randomUUID } from 'crypto'
 
 /**
  * Trace context for request-scoped correlation in Kibana.
@@ -27,7 +27,7 @@ export const runWithTrace = async <T>(
 	traceId?: string
 ): Promise<T> => {
 	const id = traceId ?? randomUUID()
-	return traceStorage.run({traceId: id}, () => fn())
+	return traceStorage.run({ traceId: id }, () => fn())
 }
 
 /**
@@ -35,7 +35,7 @@ export const runWithTrace = async <T>(
  */
 export const runWithTraceSync = <T>(fn: () => T, traceId?: string): T => {
 	const id = traceId ?? randomUUID()
-	return traceStorage.run({traceId: id}, () => fn())
+	return traceStorage.run({ traceId: id }, () => fn())
 }
 
 /**
