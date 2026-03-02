@@ -36,8 +36,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isValidLogLevel = isValidLogLevel;
 const pino_1 = require("pino");
 const dotenv = __importStar(require("dotenv"));
+const os_1 = require("os");
 const elastic_transport_1 = require("./elastic-transport");
+const trace_store_1 = require("./trace-store");
 dotenv.config();
+/** Convert camelCase to snake_case for Kibana/ECS-friendly field names */
+const toSnakeCase = (str) => str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+/** Check if value is a plain object (not Error, Date, Array, null) */
+const isPlainObject = (v) => v !== null &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    !(v instanceof Error) &&
+    !(v instanceof Date);
 /**
  * Pino logger backend - singleton
  */
@@ -240,19 +250,64 @@ class Logger {
         this._name = name;
         this._logger = getLogger(elasticConfig);
     }
-    log(logLevel, logEvent, ...args) {
+    /**
+     * Build ECS-aligned and structured log payload.
+     * - ECS: log.level, log.logger, event.code, service.name, service.environment, message
+     * - Structured: Single plain object flattened as top-level snake_case fields (Kibana filterable)
+     * - Trace: trace.id when running inside runWithTrace
+     */
+    buildPayload(logLevel, logEvent, args) {
+        var _a, _b;
+        const isLocal = process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test';
+        // ECS-aligned fields for Kibana Discover, Lens, alerts
+        const ecs = {
+            'log.level': logLevel,
+            'log.logger': this._name,
+            'event.code': logEvent.code,
+            message: logEvent.msg,
+            service: {
+                name: (_a = process.env.SERVER_NICKNAME) !== null && _a !== void 0 ? _a : 'unknown',
+                environment: (_b = process.env.NODE_ENV) !== null && _b !== void 0 ? _b : 'development',
+            },
+            host: {
+                name: (0, os_1.hostname)(),
+            },
+        };
+        // Trace context for request-scoped correlation
+        const trace = (0, trace_store_1.getTraceContext)();
+        if (trace) {
+            ;
+            ecs.trace = { id: trace.traceId };
+        }
+        // Structured context: flatten single plain object as top-level fields
         let detail;
-        if (process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test') {
-            detail = args;
+        if (args.length === 1 &&
+            isPlainObject(args[0]) &&
+            Object.keys(args[0]).length > 0) {
+            const obj = args[0];
+            for (const [k, v] of Object.entries(obj)) {
+                const key = toSnakeCase(k);
+                ecs[key] = v;
+            }
         }
         else {
-            detail = JSON.stringify(args);
+            detail = isLocal ? args : JSON.stringify(args);
         }
-        this._logger[logLevel]({
+        // Legacy fields for backward compatibility (component, code, msg)
+        const base = {
+            ...ecs,
             component: this._name,
-            ...logEvent,
-            detail,
-        });
+            code: logEvent.code,
+            msg: logEvent.msg,
+        };
+        if (detail !== undefined) {
+            base.detail = detail;
+        }
+        return base;
+    }
+    log(logLevel, logEvent, ...args) {
+        const payload = this.buildPayload(logLevel, logEvent, args);
+        this._logger[logLevel](payload);
     }
     /**
      * Logs an error message.
@@ -293,6 +348,38 @@ class Logger {
      */
     trace(logEvent, ...args) {
         this.log('trace', logEvent, ...args);
+    }
+    /**
+     * Runs an async operation and logs its duration.
+     * Adds event.duration (ms) for Kibana performance dashboards and alerts.
+     *
+     * @param logEvent - The event to log on completion
+     * @param fn - Async function to execute
+     * @param context - Optional context object (flattened as top-level fields)
+     * @returns Result of fn
+     */
+    async withDuration(logEvent, fn, context) {
+        const start = Date.now();
+        try {
+            const result = await fn();
+            const durationMs = Date.now() - start;
+            const payload = this.buildPayload('info', logEvent, [
+                { ...context, duration_ms: durationMs, success: true },
+            ]);
+            this._logger.info(payload);
+            return result;
+        }
+        catch (error) {
+            const durationMs = Date.now() - start;
+            const errObj = error instanceof Error
+                ? { error_message: error.message, error_type: error.constructor.name }
+                : {};
+            const payload = this.buildPayload('error', logEvent, [
+                { ...context, ...errObj, duration_ms: durationMs, success: false },
+            ]);
+            this._logger.error(payload);
+            throw error;
+        }
     }
 }
 exports.default = Logger;
