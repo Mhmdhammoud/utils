@@ -234,7 +234,9 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 				if (err.document) {
 					const docStr = JSON.stringify(err.document)
 					const preview =
-						docStr.length > 500 ? `${docStr.substring(0, 500)}... (truncated)` : docStr
+						docStr.length > 500
+							? `${docStr.substring(0, 500)}... (truncated)`
+							: docStr
 					console.error('[Logger] Dropped document preview:', preview)
 				}
 			})
