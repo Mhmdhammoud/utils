@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Logger = exports.ImageFull = exports.Colorful = exports.Pdf = exports.Formatter = exports.Crypto = void 0;
+exports.getTraceContext = exports.runWithTraceSync = exports.runWithTrace = exports.Logger = exports.ImageFull = exports.Colorful = exports.Pdf = exports.Formatter = exports.Crypto = void 0;
 var cypto_1 = require("./cypto");
 Object.defineProperty(exports, "Crypto", { enumerable: true, get: function () { return __importDefault(cypto_1).default; } });
 var formatter_1 = require("./formatter");
@@ -16,3 +16,7 @@ var imagefull_1 = require("./imagefull");
 Object.defineProperty(exports, "ImageFull", { enumerable: true, get: function () { return __importDefault(imagefull_1).default; } });
 var logger_1 = require("./logger");
 Object.defineProperty(exports, "Logger", { enumerable: true, get: function () { return __importDefault(logger_1).default; } });
+var trace_store_1 = require("./trace-store");
+Object.defineProperty(exports, "runWithTrace", { enumerable: true, get: function () { return trace_store_1.runWithTrace; } });
+Object.defineProperty(exports, "runWithTraceSync", { enumerable: true, get: function () { return trace_store_1.runWithTraceSync; } });
+Object.defineProperty(exports, "getTraceContext", { enumerable: true, get: function () { return trace_store_1.getTraceContext; } });

@@ -70,7 +70,7 @@ describe('route and format logs', () => {
 		key0: 'val0',
 		key1: 'val1',
 	}
-	test('log info with details', () => {
+	test('log info with structured context (single object flattened)', () => {
 		//@ts-ignore
 		jest.spyOn(pino, 'destination').mockReturnValue(PINO_DESTINATION)
 		//@ts-ignore
@@ -79,10 +79,14 @@ describe('route and format logs', () => {
 
 		logger.info(LOG_EVENT, DETAILS)
 
-		expect(PINO.info).toHaveBeenCalledWith({
-			component: LOGGER_NAME,
-			...LOG_EVENT,
-			detail: [DETAILS],
-		})
+		expect(PINO.info).toHaveBeenCalledWith(
+			expect.objectContaining({
+				component: LOGGER_NAME,
+				code: LOG_EVENT.code,
+				msg: LOG_EVENT.msg,
+				key0: 'val0',
+				key1: 'val1',
+			})
+		)
 	})
 })
