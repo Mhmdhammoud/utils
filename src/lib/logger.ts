@@ -11,6 +11,39 @@ dotenv.config()
 const toSnakeCase = (str: string): string =>
 	str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 
+/**
+ * Elasticsearch reserves metadata fields (e.g. `_id`) and rejects documents
+ * containing them in payload body. Remap them to safe application fields.
+ */
+const RESERVED_ES_FIELD_ALIASES: Record<string, string> = {
+	_id: 'mongo_id',
+	_index: 'es_index',
+	_type: 'es_type',
+	_score: 'es_score',
+	_source: 'es_source',
+	_routing: 'es_routing',
+	_seq_no: 'es_seq_no',
+	_primary_term: 'es_primary_term',
+	_version: 'es_version',
+}
+
+/** Convert arbitrary field names into ES-safe flattened keys */
+const toSafeElasticFieldName = (key: string): string => {
+	const normalized = toSnakeCase(key)
+	const mapped = RESERVED_ES_FIELD_ALIASES[normalized]
+	if (mapped) {
+		return mapped
+	}
+	// Any leading underscore can conflict with ES internals, remap defensively.
+	return normalized.startsWith('_') ? `meta${normalized}` : normalized
+}
+
+const isObjectIdLike = (v: unknown): v is { toHexString: () => string } =>
+	v !== null &&
+	typeof v === 'object' &&
+	'toHexString' in v &&
+	typeof (v as { toHexString?: unknown }).toHexString === 'function'
+
 /** Check if value is a plain object (not Error, Date, Array, null) */
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
 	v !== null &&
@@ -18,6 +51,86 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
 	!Array.isArray(v) &&
 	!(v instanceof Error) &&
 	!(v instanceof Date)
+
+/**
+ * Recursively sanitize log values for Elasticsearch safety.
+ * - Remaps reserved key names (e.g. `_id` -> `mongo_id`)
+ * - Converts Error to a stable serializable shape
+ * - Converts ObjectId-like objects to hex strings
+ * - Prevents circular structure failures
+ */
+const sanitizeForElastic = (
+	value: unknown,
+	seen: WeakSet<object> = new WeakSet<object>()
+): unknown => {
+	if (
+		value === null ||
+		typeof value === 'string' ||
+		typeof value === 'number' ||
+		typeof value === 'boolean'
+	) {
+		return value
+	}
+
+	if (value instanceof Date) {
+		return value.toISOString()
+	}
+
+	if (value instanceof Error) {
+		return { message: value.message, type: value.constructor.name }
+	}
+
+	if (isObjectIdLike(value)) {
+		return value.toHexString()
+	}
+
+	if (Array.isArray(value)) {
+		return value.map((item) => sanitizeForElastic(item, seen))
+	}
+
+	if (isPlainObject(value)) {
+		if (seen.has(value)) {
+			return '[Circular]'
+		}
+		seen.add(value)
+
+		const sanitizedObject: Record<string, unknown> = {}
+		for (const [k, v] of Object.entries(value)) {
+			sanitizedObject[toSafeElasticFieldName(k)] = sanitizeForElastic(v, seen)
+		}
+		return sanitizedObject
+	}
+
+	// Fallback for class instances and non-plain objects.
+	return String(value)
+}
+
+/**
+ * Captures the call site from the stack when log event is missing.
+ * Returns file:line (e.g. product.service.ts:2266) for Kibana/Elasticsearch filtering.
+ */
+const getCallSiteForMissingLog = (): string | undefined => {
+	try {
+		const stack = new Error().stack ?? ''
+		const lines = stack.split('\n')
+		// First frame outside Logger / node_modules / meritt-utils
+		const appFrame = lines.find(
+			(line) =>
+				!line.includes('node_modules') &&
+				!line.includes('meritt-utils') &&
+				!line.includes('Logger.')
+		)
+		if (!appFrame) return undefined
+		// Extract file:line e.g. "product.service.ts:2266"
+		const match = appFrame.match(/([^/\\]+\.(?:ts|js|tsx|jsx)):(\d+)/)
+		if (match) {
+			return `${match[1]}:${match[2]}`
+		}
+		return appFrame.trim().slice(0, 100)
+	} catch {
+		return undefined
+	}
+}
 
 /**
  * Pino logger backend - singleton
@@ -325,10 +438,11 @@ class Logger {
 			process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test'
 
 		// Defensive: missing Logs constant (undefined) crashes on logEvent.code
-		const event =
-			logEvent && typeof logEvent === 'object' && 'code' in logEvent
-				? logEvent
-				: { code: 'UNKNOWN', msg: 'Missing or invalid log event constant' }
+		const useFallback =
+			!logEvent || typeof logEvent !== 'object' || !('code' in logEvent)
+		const event = useFallback
+			? { code: 'UNKNOWN', msg: 'Missing or invalid log event constant' }
+			: logEvent
 
 		// ECS-aligned fields for Kibana (flat names to avoid mapping conflicts with existing indices)
 		const ecs: Record<string, unknown> = {
@@ -357,11 +471,8 @@ class Logger {
 		) {
 			const obj = args[0]
 			for (const [k, v] of Object.entries(obj)) {
-				const key = toSnakeCase(k)
-				ecs[key] =
-					v instanceof Error
-						? { message: v.message, type: v.constructor.name }
-						: v
+				const key = toSafeElasticFieldName(k)
+				ecs[key] = sanitizeForElastic(v)
 			}
 		} else {
 			detail = isLocal ? args : JSON.stringify(args)
@@ -376,6 +487,13 @@ class Logger {
 		}
 		if (detail !== undefined) {
 			base.detail = detail
+		}
+		// When fallback used: add call site for Kibana/Elasticsearch querying
+		if (useFallback) {
+			const callSite = getCallSiteForMissingLog()
+			if (callSite) {
+				base.missing_log_call_site = callSite
+			}
 		}
 		return base
 	}

@@ -89,4 +89,35 @@ describe('route and format logs', () => {
 			})
 		)
 	})
+
+	test('remap reserved elastic field names dynamically', () => {
+		//@ts-ignore
+		jest.spyOn(pino, 'destination').mockReturnValue(PINO_DESTINATION)
+		//@ts-ignore
+		pino.mockReturnValue(PINO)
+		const logger = new Logger(LOGGER_NAME)
+
+		logger.info(LOG_EVENT, {
+			_id: 'abc123',
+			nested: {
+				_id: 'nested-1',
+				_index: 'bad-index',
+			},
+		})
+
+		expect(PINO.info).toHaveBeenCalledWith(
+			expect.objectContaining({
+				mongo_id: 'abc123',
+				nested: expect.objectContaining({
+					mongo_id: 'nested-1',
+					es_index: 'bad-index',
+				}),
+			})
+		)
+		expect(PINO.info).not.toHaveBeenCalledWith(
+			expect.objectContaining({
+				_id: expect.anything(),
+			})
+		)
+	})
 })
