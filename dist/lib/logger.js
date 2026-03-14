@@ -78,6 +78,37 @@ const isPlainObject = (v) => v !== null &&
     !(v instanceof Error) &&
     !(v instanceof Date);
 /**
+ * Reduces object values to scalars for top-level ES fields.
+ * ES text/keyword fields reject nested objects; use _id or truncated JSON.
+ */
+const toScalarForTopLevel = (value) => {
+    if (value === null || value === undefined)
+        return null;
+    if (typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean')
+        return value;
+    if (value instanceof Date)
+        return value.toISOString();
+    if (isObjectIdLike(value))
+        return value.toHexString();
+    if (value instanceof Error)
+        return value.message;
+    if (isPlainObject(value) && '_id' in value) {
+        const id = value._id;
+        if (id != null) {
+            if (typeof id === 'string')
+                return id;
+            if (isObjectIdLike(id))
+                return id.toHexString();
+            if (typeof id === 'object' && id !== null && 'toString' in id)
+                return String(id.toString());
+        }
+    }
+    const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return str.length > 200 ? `${str.slice(0, 200)}...` : str;
+};
+/**
  * Recursively sanitize log values for Elasticsearch safety.
  * - Remaps reserved key names (e.g. `_id` -> `mongo_id`)
  * - Converts Error to a stable serializable shape
@@ -382,7 +413,7 @@ class Logger {
             ecs.trace_id = trace.traceId;
         }
         // Structured context: flatten single plain object as top-level fields
-        // Sanitize values to avoid ES mapping conflicts (e.g. Error objects → serializable shape)
+        // Use scalars only for top-level ES fields; text/keyword mappings reject nested objects
         let detail;
         if (args.length === 1 &&
             isPlainObject(args[0]) &&
@@ -390,11 +421,11 @@ class Logger {
             const obj = args[0];
             for (const [k, v] of Object.entries(obj)) {
                 const key = toSafeElasticFieldName(k);
-                ecs[key] = sanitizeForElastic(v);
+                ecs[key] = toScalarForTopLevel(v);
             }
         }
         else {
-            detail = isLocal ? args : JSON.stringify(args);
+            detail = isLocal ? args : JSON.stringify(sanitizeForElastic(args));
         }
         // Legacy fields for backward compatibility (component, code, msg)
         const base = {
