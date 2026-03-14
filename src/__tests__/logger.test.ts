@@ -84,7 +84,7 @@ describe('route and format logs', () => {
 				component: LOGGER_NAME,
 				code: LOG_EVENT.code,
 				msg: LOG_EVENT.msg,
-				context: {key0: 'val0', key1: 'val1'},
+				context: { key0: 'val0', key1: 'val1' },
 			})
 		)
 	})
@@ -109,7 +109,7 @@ describe('route and format logs', () => {
 			expect.objectContaining({
 				context: expect.objectContaining({
 					mongo_id: 'abc123',
-					nested: {mongo_id: 'nested-1', es_index: 'bad-index'},
+					nested: { mongo_id: 'nested-1', es_index: 'bad-index' },
 				}),
 			})
 		)
