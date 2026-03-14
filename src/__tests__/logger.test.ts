@@ -90,7 +90,7 @@ describe('route and format logs', () => {
 		)
 	})
 
-	test('remap reserved elastic field names dynamically', () => {
+	test('remap reserved elastic field names and reduce objects to scalars', () => {
 		//@ts-ignore
 		jest.spyOn(pino, 'destination').mockReturnValue(PINO_DESTINATION)
 		//@ts-ignore
@@ -105,13 +105,11 @@ describe('route and format logs', () => {
 			},
 		})
 
+		// Top-level fields use scalars only (avoids ES document_parsing_exception)
 		expect(PINO.info).toHaveBeenCalledWith(
 			expect.objectContaining({
 				mongo_id: 'abc123',
-				nested: expect.objectContaining({
-					mongo_id: 'nested-1',
-					es_index: 'bad-index',
-				}),
+				nested: 'nested-1',
 			})
 		)
 		expect(PINO.info).not.toHaveBeenCalledWith(
