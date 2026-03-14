@@ -70,7 +70,7 @@ describe('route and format logs', () => {
 		key0: 'val0',
 		key1: 'val1',
 	}
-	test('log info with structured context (single object flattened)', () => {
+	test('log info with structured context (single object in context field)', () => {
 		//@ts-ignore
 		jest.spyOn(pino, 'destination').mockReturnValue(PINO_DESTINATION)
 		//@ts-ignore
@@ -84,13 +84,12 @@ describe('route and format logs', () => {
 				component: LOGGER_NAME,
 				code: LOG_EVENT.code,
 				msg: LOG_EVENT.msg,
-				key0: 'val0',
-				key1: 'val1',
+				context: {key0: 'val0', key1: 'val1'},
 			})
 		)
 	})
 
-	test('remap reserved elastic field names and reduce objects to scalars', () => {
+	test('remap reserved elastic field names in context', () => {
 		//@ts-ignore
 		jest.spyOn(pino, 'destination').mockReturnValue(PINO_DESTINATION)
 		//@ts-ignore
@@ -105,11 +104,13 @@ describe('route and format logs', () => {
 			},
 		})
 
-		// Top-level fields use scalars only (avoids ES document_parsing_exception)
+		// Context holds sanitized structure; reserved names remapped recursively
 		expect(PINO.info).toHaveBeenCalledWith(
 			expect.objectContaining({
-				mongo_id: 'abc123',
-				nested: 'nested-1',
+				context: expect.objectContaining({
+					mongo_id: 'abc123',
+					nested: {mongo_id: 'nested-1', es_index: 'bad-index'},
+				}),
 			})
 		)
 		expect(PINO.info).not.toHaveBeenCalledWith(
