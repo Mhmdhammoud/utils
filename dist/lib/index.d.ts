@@ -4,3 +4,4 @@ export { default as Pdf } from './formatter';
 export { default as Colorful } from './colorful';
 export { default as ImageFull } from './imagefull';
 export { default as Logger } from './logger';
+export { runWithTrace, runWithTraceSync, getTraceContext, type TraceContext, } from './trace-store';

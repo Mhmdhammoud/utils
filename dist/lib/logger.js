@@ -36,8 +36,113 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isValidLogLevel = isValidLogLevel;
 const pino_1 = require("pino");
 const dotenv = __importStar(require("dotenv"));
+const os_1 = require("os");
 const elastic_transport_1 = require("./elastic-transport");
+const trace_store_1 = require("./trace-store");
 dotenv.config();
+/** Convert camelCase to snake_case for Kibana/ECS-friendly field names */
+const toSnakeCase = (str) => str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+/**
+ * Elasticsearch reserves metadata fields (e.g. `_id`) and rejects documents
+ * containing them in payload body. Remap them to safe application fields.
+ */
+const RESERVED_ES_FIELD_ALIASES = {
+    _id: 'mongo_id',
+    _index: 'es_index',
+    _type: 'es_type',
+    _score: 'es_score',
+    _source: 'es_source',
+    _routing: 'es_routing',
+    _seq_no: 'es_seq_no',
+    _primary_term: 'es_primary_term',
+    _version: 'es_version',
+};
+/** Convert arbitrary field names into ES-safe flattened keys */
+const toSafeElasticFieldName = (key) => {
+    const normalized = toSnakeCase(key);
+    const mapped = RESERVED_ES_FIELD_ALIASES[normalized];
+    if (mapped) {
+        return mapped;
+    }
+    // Any leading underscore can conflict with ES internals, remap defensively.
+    return normalized.startsWith('_') ? `meta${normalized}` : normalized;
+};
+const isObjectIdLike = (v) => v !== null &&
+    typeof v === 'object' &&
+    'toHexString' in v &&
+    typeof v.toHexString === 'function';
+/** Check if value is a plain object (not Error, Date, Array, null) */
+const isPlainObject = (v) => v !== null &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    !(v instanceof Error) &&
+    !(v instanceof Date);
+/**
+ * Recursively sanitize log values for Elasticsearch safety.
+ * - Remaps reserved key names (e.g. `_id` -> `mongo_id`)
+ * - Converts Error to a stable serializable shape
+ * - Converts ObjectId-like objects to hex strings
+ * - Prevents circular structure failures
+ */
+const sanitizeForElastic = (value, seen = new WeakSet()) => {
+    if (value === null ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean') {
+        return value;
+    }
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    if (value instanceof Error) {
+        return { message: value.message, type: value.constructor.name };
+    }
+    if (isObjectIdLike(value)) {
+        return value.toHexString();
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizeForElastic(item, seen));
+    }
+    if (isPlainObject(value)) {
+        if (seen.has(value)) {
+            return '[Circular]';
+        }
+        seen.add(value);
+        const sanitizedObject = {};
+        for (const [k, v] of Object.entries(value)) {
+            sanitizedObject[toSafeElasticFieldName(k)] = sanitizeForElastic(v, seen);
+        }
+        return sanitizedObject;
+    }
+    // Fallback for class instances and non-plain objects.
+    return String(value);
+};
+/**
+ * Captures the call site from the stack when log event is missing.
+ * Returns file:line (e.g. product.service.ts:2266) for Kibana/Elasticsearch filtering.
+ */
+const getCallSiteForMissingLog = () => {
+    var _a;
+    try {
+        const stack = (_a = new Error().stack) !== null && _a !== void 0 ? _a : '';
+        const lines = stack.split('\n');
+        // First frame outside Logger / node_modules / meritt-utils
+        const appFrame = lines.find((line) => !line.includes('node_modules') &&
+            !line.includes('meritt-utils') &&
+            !line.includes('Logger.'));
+        if (!appFrame)
+            return undefined;
+        // Extract file:line e.g. "product.service.ts:2266"
+        const match = appFrame.match(/([^/\\]+\.(?:ts|js|tsx|jsx)):(\d+)/);
+        if (match) {
+            return `${match[1]}:${match[2]}`;
+        }
+        return appFrame.trim().slice(0, 100);
+    }
+    catch (_b) {
+        return undefined;
+    }
+};
 /**
  * Pino logger backend - singleton
  */
@@ -198,6 +303,13 @@ function getLogger(elasticConfig) {
             esTransport.on('insertError', (err) => {
                 console.error('[Logger] Elasticsearch insert error:', err.message);
                 console.error('[Logger] Some logs failed to index to Elasticsearch.');
+                if (err.document) {
+                    const docStr = JSON.stringify(err.document);
+                    const preview = docStr.length > 500
+                        ? `${docStr.substring(0, 500)}... (truncated)`
+                        : docStr;
+                    console.error('[Logger] Dropped document preview:', preview);
+                }
             });
             // Log successful connection (for debugging)
             esTransport.on('insert', () => {
@@ -240,19 +352,73 @@ class Logger {
         this._name = name;
         this._logger = getLogger(elasticConfig);
     }
-    log(logLevel, logEvent, ...args) {
+    /**
+     * Build ECS-aligned and structured log payload.
+     * - ECS: log.level, log.logger, event.code, service.name, service.environment, message
+     * - Structured: Single plain object flattened as top-level snake_case fields (Kibana filterable)
+     * - Trace: trace.id when running inside runWithTrace
+     */
+    buildPayload(logLevel, logEvent, args) {
+        var _a, _b;
+        const isLocal = process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test';
+        // Defensive: missing Logs constant (undefined) crashes on logEvent.code
+        const useFallback = !logEvent || typeof logEvent !== 'object' || !('code' in logEvent);
+        const event = useFallback
+            ? { code: 'UNKNOWN', msg: 'Missing or invalid log event constant' }
+            : logEvent;
+        // ECS-aligned fields for Kibana (flat names to avoid mapping conflicts with existing indices)
+        const ecs = {
+            log_level: logLevel,
+            log_logger: this._name,
+            event_code: event.code,
+            message: event.msg,
+            service_name: (_a = process.env.SERVER_NICKNAME) !== null && _a !== void 0 ? _a : 'unknown',
+            service_environment: (_b = process.env.NODE_ENV) !== null && _b !== void 0 ? _b : 'development',
+            host_name: (0, os_1.hostname)(),
+        };
+        // Trace context for request-scoped correlation
+        const trace = (0, trace_store_1.getTraceContext)();
+        if (trace) {
+            ecs.trace_id = trace.traceId;
+        }
+        // Structured context: put in single 'context' field to avoid ES mapping conflicts.
+        // Flattening to top-level caused document_parsing_exception (object vs scalar type mismatches).
+        // Nesting in context keeps structure consistent and avoids per-field mapping conflicts.
+        let context;
         let detail;
-        if (process.env.NODE_ENV === 'local' || process.env.NODE_ENV === 'test') {
-            detail = args;
+        if (args.length === 1 &&
+            isPlainObject(args[0]) &&
+            Object.keys(args[0]).length > 0) {
+            context = sanitizeForElastic(args[0]);
         }
         else {
-            detail = JSON.stringify(args);
+            detail = isLocal ? args : JSON.stringify(sanitizeForElastic(args));
         }
-        this._logger[logLevel]({
+        // Legacy fields for backward compatibility (component, code, msg)
+        const base = {
+            ...ecs,
             component: this._name,
-            ...logEvent,
-            detail,
-        });
+            code: event.code,
+            msg: event.msg,
+        };
+        if (context !== undefined) {
+            base.context = context;
+        }
+        if (detail !== undefined) {
+            base.detail = detail;
+        }
+        // When fallback used: add call site for Kibana/Elasticsearch querying
+        if (useFallback) {
+            const callSite = getCallSiteForMissingLog();
+            if (callSite) {
+                base.missing_log_call_site = callSite;
+            }
+        }
+        return base;
+    }
+    log(logLevel, logEvent, ...args) {
+        const payload = this.buildPayload(logLevel, logEvent, args);
+        this._logger[logLevel](payload);
     }
     /**
      * Logs an error message.
@@ -293,6 +459,38 @@ class Logger {
      */
     trace(logEvent, ...args) {
         this.log('trace', logEvent, ...args);
+    }
+    /**
+     * Runs an async operation and logs its duration.
+     * Adds event.duration (ms) for Kibana performance dashboards and alerts.
+     *
+     * @param logEvent - The event to log on completion
+     * @param fn - Async function to execute
+     * @param context - Optional context object (flattened as top-level fields)
+     * @returns Result of fn
+     */
+    async withDuration(logEvent, fn, context) {
+        const start = Date.now();
+        try {
+            const result = await fn();
+            const durationMs = Date.now() - start;
+            const payload = this.buildPayload('info', logEvent, [
+                { ...context, duration_ms: durationMs, success: true },
+            ]);
+            this._logger.info(payload);
+            return result;
+        }
+        catch (error) {
+            const durationMs = Date.now() - start;
+            const errObj = error instanceof Error
+                ? { error_message: error.message, error_type: error.constructor.name }
+                : {};
+            const payload = this.buildPayload('error', logEvent, [
+                { ...context, ...errObj, duration_ms: durationMs, success: false },
+            ]);
+            this._logger.error(payload);
+            throw error;
+        }
     }
 }
 exports.default = Logger;

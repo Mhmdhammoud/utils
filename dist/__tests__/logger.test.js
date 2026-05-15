@@ -94,17 +94,42 @@ describe('route and format logs', () => {
         key0: 'val0',
         key1: 'val1',
     };
-    test('log info with details', () => {
+    test('log info with structured context (single object in context field)', () => {
         //@ts-ignore
         jest.spyOn(pino_1.pino, 'destination').mockReturnValue(PINO_DESTINATION);
         //@ts-ignore
         pino_1.pino.mockReturnValue(PINO);
         const logger = new logger_1.default(LOGGER_NAME);
         logger.info(LOG_EVENT, DETAILS);
-        expect(PINO.info).toHaveBeenCalledWith({
+        expect(PINO.info).toHaveBeenCalledWith(expect.objectContaining({
             component: LOGGER_NAME,
-            ...LOG_EVENT,
-            detail: [DETAILS],
+            code: LOG_EVENT.code,
+            msg: LOG_EVENT.msg,
+            context: { key0: 'val0', key1: 'val1' },
+        }));
+    });
+    test('remap reserved elastic field names in context', () => {
+        //@ts-ignore
+        jest.spyOn(pino_1.pino, 'destination').mockReturnValue(PINO_DESTINATION);
+        //@ts-ignore
+        pino_1.pino.mockReturnValue(PINO);
+        const logger = new logger_1.default(LOGGER_NAME);
+        logger.info(LOG_EVENT, {
+            _id: 'abc123',
+            nested: {
+                _id: 'nested-1',
+                _index: 'bad-index',
+            },
         });
+        // Context holds sanitized structure; reserved names remapped recursively
+        expect(PINO.info).toHaveBeenCalledWith(expect.objectContaining({
+            context: expect.objectContaining({
+                mongo_id: 'abc123',
+                nested: { mongo_id: 'nested-1', es_index: 'bad-index' },
+            }),
+        }));
+        expect(PINO.info).not.toHaveBeenCalledWith(expect.objectContaining({
+            _id: expect.anything(),
+        }));
     });
 });

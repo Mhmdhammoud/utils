@@ -23,6 +23,13 @@ declare class Logger {
      * @param elasticConfig - Optional Elasticsearch configuration.
      */
     constructor(name: string, elasticConfig?: ElasticConfig);
+    /**
+     * Build ECS-aligned and structured log payload.
+     * - ECS: log.level, log.logger, event.code, service.name, service.environment, message
+     * - Structured: Single plain object flattened as top-level snake_case fields (Kibana filterable)
+     * - Trace: trace.id when running inside runWithTrace
+     */
+    private buildPayload;
     private log;
     /**
      * Logs an error message.
@@ -54,5 +61,15 @@ declare class Logger {
      * @param args - Additional arguments to include in the log.
      */
     trace(logEvent: LogEvent, ...args: unknown[]): void;
+    /**
+     * Runs an async operation and logs its duration.
+     * Adds event.duration (ms) for Kibana performance dashboards and alerts.
+     *
+     * @param logEvent - The event to log on completion
+     * @param fn - Async function to execute
+     * @param context - Optional context object (flattened as top-level fields)
+     * @returns Result of fn
+     */
+    withDuration<T>(logEvent: LogEvent, fn: () => Promise<T>, context?: Record<string, unknown>): Promise<T>;
 }
 export default Logger;
