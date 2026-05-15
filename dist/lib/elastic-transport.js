@@ -33,24 +33,12 @@ function getIndexName(index, time) {
     }
     return index.replace('%{DATE}', time.substring(0, 10));
 }
-function initializeBulkHandler(opts, client, splitter) {
+function initializeBulkHandler(opts, client, splitter, onFatalError) {
     var _a, _b, _c, _d, _e, _f, _g;
     const esVersion = Number((_b = (_a = opts.esVersion) !== null && _a !== void 0 ? _a : opts['es-version']) !== null && _b !== void 0 ? _b : 7);
     const index = (_c = opts.index) !== null && _c !== void 0 ? _c : 'pino';
     const buildIndexName = typeof index === 'function' ? index : null;
     const opType = esVersion >= 7 ? undefined : undefined;
-    // CRITICAL FIX (issue #140): When bulk helper destroys stream after retries exhausted,
-    // we must BOTH resurrect the pool AND reinitialize the bulk handler so logging continues.
-    // connectionPool.resurrect exists at runtime (elastic-transport) but may not be in types
-    const pool = client.connectionPool;
-    const splitterWithDestroy = splitter;
-    splitterWithDestroy.destroy = function () {
-        if (typeof pool.resurrect === 'function') {
-            pool.resurrect({ name: 'elasticsearch-js' });
-        }
-        // Reinitialize bulk handler - without this, logging stops permanently until restart
-        initializeBulkHandler(opts, client, splitter);
-    };
     const indexName = (time = new Date().toISOString()) => buildIndexName ? buildIndexName(time) : getIndexName(index, time);
     const bulkInsert = client.helpers.bulk({
         datasource: splitter,
@@ -77,7 +65,10 @@ function initializeBulkHandler(opts, client, splitter) {
             splitter.emit('insertError', error);
         },
     });
-    bulkInsert.then((stats) => splitter.emit('insert', stats), (err) => splitter.emit('error', err));
+    bulkInsert.then((stats) => splitter.emit('insert', stats), (err) => {
+        splitter.emit('error', err);
+        onFatalError(err);
+    });
 }
 const createElasticTransport = (opts = {}) => {
     const splitter = split(function (line) {
@@ -128,10 +119,56 @@ const createElasticTransport = (opts = {}) => {
         clientOpts.ConnectionPool = opts.ConnectionPool;
     }
     const client = new elasticsearch_1.Client(clientOpts);
+    // CRITICAL FIX (pino-elasticsearch issues #140/#72): after retries are
+    // exhausted the bulk helper can stop consuming the stream while the process
+    // stays alive. Keep exactly one helper active and replace it after fatal
+    // helper failures instead of waiting for a server restart.
+    let isBulkHandlerActive = false;
+    let isRestartScheduled = false;
+    let isTransportClosed = false;
+    const pool = client.connectionPool;
+    const splitterWithDestroy = splitter;
+    const originalDestroy = splitterWithDestroy.destroy.bind(splitterWithDestroy);
+    const startBulkHandler = () => {
+        if (isTransportClosed || isBulkHandlerActive) {
+            return;
+        }
+        isBulkHandlerActive = true;
+        initializeBulkHandler(opts, client, splitter, () => {
+            isBulkHandlerActive = false;
+            scheduleBulkHandlerRestart();
+        });
+    };
+    const scheduleBulkHandlerRestart = () => {
+        var _a, _b, _c;
+        if (isTransportClosed || isRestartScheduled) {
+            return;
+        }
+        isRestartScheduled = true;
+        if (typeof pool.resurrect === 'function') {
+            pool.resurrect({ name: 'elasticsearch-js' });
+        }
+        const retryDelayMs = Math.min(Number((_b = (_a = opts.flushInterval) !== null && _a !== void 0 ? _a : opts['flush-interval']) !== null && _b !== void 0 ? _b : 3000), 5000);
+        const timer = setTimeout(() => {
+            isRestartScheduled = false;
+            startBulkHandler();
+        }, retryDelayMs);
+        (_c = timer.unref) === null || _c === void 0 ? void 0 : _c.call(timer);
+    };
+    splitterWithDestroy.destroy = function (err) {
+        if (err && !isTransportClosed) {
+            scheduleBulkHandlerRestart();
+            return;
+        }
+        isTransportClosed = true;
+        originalDestroy(err);
+    };
     client.diagnostic.on('resurrect', () => {
-        initializeBulkHandler(opts, client, splitter);
+        if (!isBulkHandlerActive) {
+            scheduleBulkHandlerRestart();
+        }
     });
-    initializeBulkHandler(opts, client, splitter);
+    startBulkHandler();
     return splitter;
 };
 exports.createElasticTransport = createElasticTransport;

@@ -76,29 +76,13 @@ function getIndexName(
 function initializeBulkHandler(
 	opts: ElasticTransportOptions,
 	client: Client,
-	splitter: NodeJS.ReadWriteStream
+	splitter: NodeJS.ReadWriteStream,
+	onFatalError: (err: Error) => void
 ): void {
 	const esVersion = Number(opts.esVersion ?? opts['es-version'] ?? 7)
 	const index = opts.index ?? 'pino'
 	const buildIndexName = typeof index === 'function' ? index : null
 	const opType = esVersion >= 7 ? undefined : undefined
-
-	// CRITICAL FIX (issue #140): When bulk helper destroys stream after retries exhausted,
-	// we must BOTH resurrect the pool AND reinitialize the bulk handler so logging continues.
-	// connectionPool.resurrect exists at runtime (elastic-transport) but may not be in types
-	const pool = client.connectionPool as {
-		resurrect?: (opts: { name: string }) => void
-	}
-	const splitterWithDestroy = splitter as NodeJS.ReadWriteStream & {
-		destroy: (err?: Error) => void
-	}
-	splitterWithDestroy.destroy = function () {
-		if (typeof pool.resurrect === 'function') {
-			pool.resurrect({ name: 'elasticsearch-js' })
-		}
-		// Reinitialize bulk handler - without this, logging stops permanently until restart
-		initializeBulkHandler(opts, client, splitter)
-	}
 
 	const indexName = (time = new Date().toISOString()) =>
 		buildIndexName ? buildIndexName(time) : getIndexName(index as string, time)
@@ -132,7 +116,10 @@ function initializeBulkHandler(
 
 	bulkInsert.then(
 		(stats) => splitter.emit('insert', stats),
-		(err) => splitter.emit('error', err)
+		(err) => {
+			splitter.emit('error', err)
+			onFatalError(err)
+		}
 	)
 }
 
@@ -193,11 +180,70 @@ export const createElasticTransport = (
 
 	const client = new Client(clientOpts)
 
+	// CRITICAL FIX (pino-elasticsearch issues #140/#72): after retries are
+	// exhausted the bulk helper can stop consuming the stream while the process
+	// stays alive. Keep exactly one helper active and replace it after fatal
+	// helper failures instead of waiting for a server restart.
+	let isBulkHandlerActive = false
+	let isRestartScheduled = false
+	let isTransportClosed = false
+
+	const pool = client.connectionPool as {
+		resurrect?: (opts: { name: string }) => void
+	}
+	const splitterWithDestroy = splitter as NodeJS.ReadWriteStream & {
+		destroy: (err?: Error) => void
+	}
+	const originalDestroy = splitterWithDestroy.destroy.bind(splitterWithDestroy)
+
+	const startBulkHandler = () => {
+		if (isTransportClosed || isBulkHandlerActive) {
+			return
+		}
+		isBulkHandlerActive = true
+		initializeBulkHandler(opts, client, splitter, () => {
+			isBulkHandlerActive = false
+			scheduleBulkHandlerRestart()
+		})
+	}
+
+	const scheduleBulkHandlerRestart = () => {
+		if (isTransportClosed || isRestartScheduled) {
+			return
+		}
+		isRestartScheduled = true
+
+		if (typeof pool.resurrect === 'function') {
+			pool.resurrect({ name: 'elasticsearch-js' })
+		}
+
+		const retryDelayMs = Math.min(
+			Number(opts.flushInterval ?? opts['flush-interval'] ?? 3000),
+			5000
+		)
+		const timer = setTimeout(() => {
+			isRestartScheduled = false
+			startBulkHandler()
+		}, retryDelayMs)
+		timer.unref?.()
+	}
+
+	splitterWithDestroy.destroy = function (err?: Error) {
+		if (err && !isTransportClosed) {
+			scheduleBulkHandlerRestart()
+			return
+		}
+		isTransportClosed = true
+		originalDestroy(err)
+	}
+
 	client.diagnostic.on('resurrect', () => {
-		initializeBulkHandler(opts, client, splitter)
+		if (!isBulkHandlerActive) {
+			scheduleBulkHandlerRestart()
+		}
 	})
 
-	initializeBulkHandler(opts, client, splitter)
+	startBulkHandler()
 
 	return splitter
 }
