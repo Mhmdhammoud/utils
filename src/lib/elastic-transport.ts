@@ -192,7 +192,7 @@ function createBulkSender(
 
 			splitter.emit('insert', {
 				successful: batch.length,
-				failed: body.errors ? body.items?.length ?? 0 : 0,
+				failed: body.errors ? (body.items?.length ?? 0) : 0,
 			})
 		} catch (err) {
 			splitter.emit('error', err)
