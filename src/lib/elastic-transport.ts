@@ -17,7 +17,6 @@ const split = require('split2') as (
 	fn: (line: string) => unknown,
 	opts?: { autoDestroy?: boolean }
 ) => NodeJS.ReadWriteStream
-import { Readable } from 'stream'
 import { Client } from '@elastic/elasticsearch'
 import type { ClientOptions } from '@elastic/elasticsearch'
 
@@ -73,54 +72,161 @@ function getIndexName(
 	return index.replace('%{DATE}', time.substring(0, 10))
 }
 
-function initializeBulkHandler(
+function createBulkSender(
 	opts: ElasticTransportOptions,
 	client: Client,
-	splitter: NodeJS.ReadWriteStream,
-	onFatalError: (err: Error) => void
-): void {
+	splitter: NodeJS.ReadWriteStream
+): {
+	add: (doc: unknown) => void
+	flush: () => Promise<void>
+	close: () => Promise<void>
+} {
 	const esVersion = Number(opts.esVersion ?? opts['es-version'] ?? 7)
 	const index = opts.index ?? 'pino'
 	const buildIndexName = typeof index === 'function' ? index : null
 	const opType = esVersion >= 7 ? undefined : undefined
+	const flushBytes = opts.flushBytes ?? opts['flush-bytes'] ?? 1000
+	const flushInterval = opts.flushInterval ?? opts['flush-interval'] ?? 3000
+
+	let buffer: unknown[] = []
+	let bufferedBytes = 0
+	let timer: NodeJS.Timeout | undefined
+	let isFlushing = false
+	let flushAgain = false
 
 	const indexName = (time = new Date().toISOString()) =>
 		buildIndexName ? buildIndexName(time) : getIndexName(index as string, time)
 
-	const bulkInsert = client.helpers.bulk({
-		datasource: splitter as unknown as Readable,
-		flushBytes: opts.flushBytes ?? opts['flush-bytes'] ?? 1000,
-		flushInterval: opts.flushInterval ?? opts['flush-interval'] ?? 3000,
-		refreshOnCompletion: false,
-		onDocument(doc: unknown) {
+	const clearFlushTimer = () => {
+		if (timer) {
+			clearTimeout(timer)
+			timer = undefined
+		}
+	}
+
+	const scheduleFlush = () => {
+		if (timer || buffer.length === 0) {
+			return
+		}
+		timer = setTimeout(() => {
+			timer = undefined
+			void flush()
+		}, flushInterval)
+		timer.unref?.()
+	}
+
+	const buildOperation = (doc: unknown): [Record<string, unknown>, unknown] => {
+		try {
 			const d = doc as LogDocument
 			const date = d.time ?? d['@timestamp'] ?? new Date().toISOString()
 			if (opType === 'create') {
 				d['@timestamp'] = date
 			}
-			return {
-				index: {
-					_index: indexName(date),
-					op_type: opType,
+			return [
+				{
+					index: {
+						_index: indexName(date),
+						op_type: opType,
+					},
 				},
-			}
-		},
-		onDrop(doc: unknown) {
-			const error = new Error('Dropped document') as Error & {
-				document: unknown
-			}
-			error.document = doc
-			splitter.emit('insertError', error)
-		},
-	})
-
-	bulkInsert.then(
-		(stats) => splitter.emit('insert', stats),
-		(err) => {
-			splitter.emit('error', err)
-			onFatalError(err)
+				doc,
+			]
+		} catch {
+			return [
+				{
+					index: {
+						_index: indexName(),
+						op_type: opType,
+					},
+				},
+				doc,
+			]
 		}
-	)
+	}
+
+	const emitDroppedDocument = (doc: unknown, cause?: unknown) => {
+		const error = new Error('Dropped document') as Error & {
+			document: unknown
+			cause?: unknown
+		}
+		error.document = doc
+		error.cause = cause
+		splitter.emit('insertError', error)
+	}
+
+	const flush = async (): Promise<void> => {
+		if (isFlushing) {
+			flushAgain = true
+			return
+		}
+		clearFlushTimer()
+		if (buffer.length === 0) {
+			return
+		}
+
+		isFlushing = true
+		const batch = buffer
+		buffer = []
+		bufferedBytes = 0
+
+		try {
+			const operations = batch.flatMap(buildOperation)
+			const response = await client.bulk({
+				operations,
+				refresh: false,
+				timeout: opts.requestTimeout ? `${opts.requestTimeout}ms` : undefined,
+			})
+
+			const body = response as {
+				errors?: boolean
+				items?: Array<Record<string, { error?: unknown }>>
+			}
+			if (body.errors && Array.isArray(body.items)) {
+				body.items.forEach((item, index) => {
+					const result = Object.values(item)[0]
+					if (result?.error) {
+						emitDroppedDocument(batch[index], result.error)
+					}
+				})
+			}
+
+			splitter.emit('insert', {
+				successful: batch.length,
+				failed: body.errors ? body.items?.length ?? 0 : 0,
+			})
+		} catch (err) {
+			splitter.emit('error', err)
+			// Drop the failed batch instead of wedging the stream. The next log line
+			// creates a fresh bulk request and can recover without a process restart.
+			batch.forEach((doc) => emitDroppedDocument(doc, err))
+		} finally {
+			isFlushing = false
+			if (flushAgain || buffer.length > 0) {
+				flushAgain = false
+				scheduleFlush()
+				if (bufferedBytes >= flushBytes) {
+					void flush()
+				}
+			}
+		}
+	}
+
+	return {
+		add(doc: unknown) {
+			buffer.push(doc)
+			bufferedBytes += Buffer.byteLength(JSON.stringify(doc))
+			if (bufferedBytes >= flushBytes) {
+				void flush()
+				return
+			}
+			scheduleFlush()
+		},
+		flush,
+		async close() {
+			clearFlushTimer()
+			await flush()
+		},
+	}
 }
 
 export const createElasticTransport = (
@@ -179,71 +285,23 @@ export const createElasticTransport = (
 	}
 
 	const client = new Client(clientOpts)
+	const bulkSender = createBulkSender(opts, client, splitter)
 
-	// CRITICAL FIX (pino-elasticsearch issues #140/#72): after retries are
-	// exhausted the bulk helper can stop consuming the stream while the process
-	// stays alive. Keep exactly one helper active and replace it after fatal
-	// helper failures instead of waiting for a server restart.
-	let isBulkHandlerActive = false
-	let isRestartScheduled = false
-	let isTransportClosed = false
+	splitter.on('data', (doc) => {
+		bulkSender.add(doc)
+	})
+	splitter.on('finish', () => {
+		void bulkSender.close()
+	})
 
-	const pool = client.connectionPool as {
-		resurrect?: (opts: { name: string }) => void
-	}
 	const splitterWithDestroy = splitter as NodeJS.ReadWriteStream & {
 		destroy: (err?: Error) => void
 	}
 	const originalDestroy = splitterWithDestroy.destroy.bind(splitterWithDestroy)
-
-	const startBulkHandler = () => {
-		if (isTransportClosed || isBulkHandlerActive) {
-			return
-		}
-		isBulkHandlerActive = true
-		initializeBulkHandler(opts, client, splitter, () => {
-			isBulkHandlerActive = false
-			scheduleBulkHandlerRestart()
-		})
-	}
-
-	const scheduleBulkHandlerRestart = () => {
-		if (isTransportClosed || isRestartScheduled) {
-			return
-		}
-		isRestartScheduled = true
-
-		if (typeof pool.resurrect === 'function') {
-			pool.resurrect({ name: 'elasticsearch-js' })
-		}
-
-		const retryDelayMs = Math.min(
-			Number(opts.flushInterval ?? opts['flush-interval'] ?? 3000),
-			5000
-		)
-		const timer = setTimeout(() => {
-			isRestartScheduled = false
-			startBulkHandler()
-		}, retryDelayMs)
-		timer.unref?.()
-	}
-
 	splitterWithDestroy.destroy = function (err?: Error) {
-		if (err && !isTransportClosed) {
-			scheduleBulkHandlerRestart()
-			return
-		}
-		isTransportClosed = true
+		void bulkSender.close()
 		originalDestroy(err)
 	}
-
-	client.diagnostic.on('resurrect', () => {
-		if (!isBulkHandlerActive) {
-			scheduleBulkHandlerRestart()
-		}
-	})
-
-	startBulkHandler()
 
 	return splitter
 }
