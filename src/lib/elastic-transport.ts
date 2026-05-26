@@ -49,6 +49,14 @@ interface LogDocument {
 	[k: string]: unknown
 }
 
+export interface ElasticTransportStream extends NodeJS.ReadWriteStream {
+	flush: () => Promise<void>
+	close: () => Promise<void>
+}
+
+const createTimeoutError = (timeoutMs: number): Error =>
+	new Error(`Elasticsearch bulk request timed out after ${timeoutMs}ms`)
+
 function setDateTimeString(value: unknown): string {
 	if (value !== null && typeof value === 'object' && 'time' in value) {
 		const t = (value as { time: unknown }).time
@@ -87,6 +95,8 @@ function createBulkSender(
 	const opType = esVersion >= 7 ? undefined : undefined
 	const flushBytes = opts.flushBytes ?? opts['flush-bytes'] ?? 1000
 	const flushInterval = opts.flushInterval ?? opts['flush-interval'] ?? 3000
+	const requestTimeout = opts.requestTimeout ?? 30000
+	const bulkWatchdogTimeout = requestTimeout + 5000
 
 	let buffer: unknown[] = []
 	let bufferedBytes = 0
@@ -154,6 +164,49 @@ function createBulkSender(
 		splitter.emit('insertError', error)
 	}
 
+	const emitBulkError = (err: unknown) => {
+		// Do not emit the standard stream "error" event for retryable bulk
+		// failures. Some stream consumers treat it as terminal, which can leave
+		// Pino writing into a poisoned stream while the process continues running.
+		splitter.emit('bulkError', err)
+	}
+
+	const bulkWithWatchdog = async (
+		operations: unknown[]
+	): Promise<{
+		errors?: boolean
+		items?: Array<Record<string, { error?: unknown }>>
+	}> => {
+		let timeout: NodeJS.Timeout | undefined
+		const bulkPromise = client.bulk({
+			operations,
+			refresh: false,
+			timeout: `${requestTimeout}ms`,
+		}) as Promise<{
+			errors?: boolean
+			items?: Array<Record<string, { error?: unknown }>>
+		}>
+
+		try {
+			return await Promise.race([
+				bulkPromise,
+				new Promise<never>((_, reject) => {
+					timeout = setTimeout(() => {
+						reject(createTimeoutError(bulkWatchdogTimeout))
+					}, bulkWatchdogTimeout)
+					timeout.unref?.()
+				}),
+			])
+		} finally {
+			if (timeout) {
+				clearTimeout(timeout)
+			}
+			// If the watchdog wins, the original request may reject later. Consume
+			// that rejection so a stale request cannot crash the app.
+			bulkPromise.catch(() => undefined)
+		}
+	}
+
 	const flush = async (): Promise<void> => {
 		if (isFlushing) {
 			flushAgain = true
@@ -171,16 +224,7 @@ function createBulkSender(
 
 		try {
 			const operations = batch.flatMap(buildOperation)
-			const response = await client.bulk({
-				operations,
-				refresh: false,
-				timeout: opts.requestTimeout ? `${opts.requestTimeout}ms` : undefined,
-			})
-
-			const body = response as {
-				errors?: boolean
-				items?: Array<Record<string, { error?: unknown }>>
-			}
+			const body = await bulkWithWatchdog(operations)
 			if (body.errors && Array.isArray(body.items)) {
 				body.items.forEach((item, index) => {
 					const result = Object.values(item)[0]
@@ -192,10 +236,13 @@ function createBulkSender(
 
 			splitter.emit('insert', {
 				successful: batch.length,
-				failed: body.errors ? (body.items?.length ?? 0) : 0,
+				failed: body.errors
+					? (body.items?.filter((item) => Object.values(item)[0]?.error)
+							.length ?? 0)
+					: 0,
 			})
 		} catch (err) {
-			splitter.emit('error', err)
+			emitBulkError(err)
 			// Drop the failed batch instead of wedging the stream. The next log line
 			// creates a fresh bulk request and can recover without a process restart.
 			batch.forEach((doc) => emitDroppedDocument(doc, err))
@@ -231,7 +278,7 @@ function createBulkSender(
 
 export const createElasticTransport = (
 	opts: ElasticTransportOptions = {}
-): NodeJS.ReadWriteStream => {
+): ElasticTransportStream => {
 	const splitter = split(
 		function (this: NodeJS.ReadWriteStream, line: string) {
 			let value: unknown
@@ -294,14 +341,16 @@ export const createElasticTransport = (
 		void bulkSender.close()
 	})
 
-	const splitterWithDestroy = splitter as NodeJS.ReadWriteStream & {
+	const splitterWithDestroy = splitter as ElasticTransportStream & {
 		destroy: (err?: Error) => void
 	}
+	splitterWithDestroy.flush = bulkSender.flush
+	splitterWithDestroy.close = bulkSender.close
 	const originalDestroy = splitterWithDestroy.destroy.bind(splitterWithDestroy)
 	splitterWithDestroy.destroy = function (err?: Error) {
 		void bulkSender.close()
 		originalDestroy(err)
 	}
 
-	return splitter
+	return splitterWithDestroy
 }

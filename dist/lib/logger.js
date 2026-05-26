@@ -219,8 +219,12 @@ function registerShutdownHandlers() {
                         clearTimeout(timeout);
                         resolve();
                     });
-                    // Now trigger the flush
-                    esTransport === null || esTransport === void 0 ? void 0 : esTransport.end();
+                    esTransport === null || esTransport === void 0 ? void 0 : esTransport.flush().catch((error) => {
+                        console.error(`[Logger] Error flushing logs on ${signal}:`, error);
+                    }).finally(() => {
+                        // Now trigger stream shutdown
+                        esTransport === null || esTransport === void 0 ? void 0 : esTransport.end();
+                    });
                 });
             }
             catch (error) {
@@ -295,7 +299,7 @@ function getLogger(elasticConfig) {
             // Create transport with connection lifecycle fix (pino-elasticsearch #140)
             esTransport = (0, elastic_transport_1.createElasticTransport)(esConfig);
             // Handle Elasticsearch connection errors
-            esTransport.on('error', (err) => {
+            esTransport.on('bulkError', (err) => {
                 console.error('[Logger] Elasticsearch transport error:', err.message);
                 console.error('[Logger] Logs may not be reaching Kibana. Check Elasticsearch connection.');
             });

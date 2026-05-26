@@ -17,6 +17,7 @@ exports.createElasticTransport = void 0;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const split = require('split2');
 const elasticsearch_1 = require("@elastic/elasticsearch");
+const createTimeoutError = (timeoutMs) => new Error(`Elasticsearch bulk request timed out after ${timeoutMs}ms`);
 function setDateTimeString(value) {
     if (value !== null && typeof value === 'object' && 'time' in value) {
         const t = value.time;
@@ -34,13 +35,15 @@ function getIndexName(index, time) {
     return index.replace('%{DATE}', time.substring(0, 10));
 }
 function createBulkSender(opts, client, splitter) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const esVersion = Number((_b = (_a = opts.esVersion) !== null && _a !== void 0 ? _a : opts['es-version']) !== null && _b !== void 0 ? _b : 7);
     const index = (_c = opts.index) !== null && _c !== void 0 ? _c : 'pino';
     const buildIndexName = typeof index === 'function' ? index : null;
     const opType = esVersion >= 7 ? undefined : undefined;
     const flushBytes = (_e = (_d = opts.flushBytes) !== null && _d !== void 0 ? _d : opts['flush-bytes']) !== null && _e !== void 0 ? _e : 1000;
     const flushInterval = (_g = (_f = opts.flushInterval) !== null && _f !== void 0 ? _f : opts['flush-interval']) !== null && _g !== void 0 ? _g : 3000;
+    const requestTimeout = (_h = opts.requestTimeout) !== null && _h !== void 0 ? _h : 30000;
+    const bulkWatchdogTimeout = requestTimeout + 5000;
     let buffer = [];
     let bufferedBytes = 0;
     let timer;
@@ -100,6 +103,40 @@ function createBulkSender(opts, client, splitter) {
         error.cause = cause;
         splitter.emit('insertError', error);
     };
+    const emitBulkError = (err) => {
+        // Do not emit the standard stream "error" event for retryable bulk
+        // failures. Some stream consumers treat it as terminal, which can leave
+        // Pino writing into a poisoned stream while the process continues running.
+        splitter.emit('bulkError', err);
+    };
+    const bulkWithWatchdog = async (operations) => {
+        let timeout;
+        const bulkPromise = client.bulk({
+            operations,
+            refresh: false,
+            timeout: `${requestTimeout}ms`,
+        });
+        try {
+            return await Promise.race([
+                bulkPromise,
+                new Promise((_, reject) => {
+                    var _a;
+                    timeout = setTimeout(() => {
+                        reject(createTimeoutError(bulkWatchdogTimeout));
+                    }, bulkWatchdogTimeout);
+                    (_a = timeout.unref) === null || _a === void 0 ? void 0 : _a.call(timeout);
+                }),
+            ]);
+        }
+        finally {
+            if (timeout) {
+                clearTimeout(timeout);
+            }
+            // If the watchdog wins, the original request may reject later. Consume
+            // that rejection so a stale request cannot crash the app.
+            bulkPromise.catch(() => undefined);
+        }
+    };
     const flush = async () => {
         var _a, _b;
         if (isFlushing) {
@@ -116,12 +153,7 @@ function createBulkSender(opts, client, splitter) {
         bufferedBytes = 0;
         try {
             const operations = batch.flatMap(buildOperation);
-            const response = await client.bulk({
-                operations,
-                refresh: false,
-                timeout: opts.requestTimeout ? `${opts.requestTimeout}ms` : undefined,
-            });
-            const body = response;
+            const body = await bulkWithWatchdog(operations);
             if (body.errors && Array.isArray(body.items)) {
                 body.items.forEach((item, index) => {
                     const result = Object.values(item)[0];
@@ -132,11 +164,13 @@ function createBulkSender(opts, client, splitter) {
             }
             splitter.emit('insert', {
                 successful: batch.length,
-                failed: body.errors ? (_b = (_a = body.items) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0 : 0,
+                failed: body.errors
+                    ? ((_b = (_a = body.items) === null || _a === void 0 ? void 0 : _a.filter((item) => { var _a; return (_a = Object.values(item)[0]) === null || _a === void 0 ? void 0 : _a.error; }).length) !== null && _b !== void 0 ? _b : 0)
+                    : 0,
             });
         }
         catch (err) {
-            splitter.emit('error', err);
+            emitBulkError(err);
             // Drop the failed batch instead of wedging the stream. The next log line
             // creates a fresh bulk request and can recover without a process restart.
             batch.forEach((doc) => emitDroppedDocument(doc, err));
@@ -226,11 +260,13 @@ const createElasticTransport = (opts = {}) => {
         void bulkSender.close();
     });
     const splitterWithDestroy = splitter;
+    splitterWithDestroy.flush = bulkSender.flush;
+    splitterWithDestroy.close = bulkSender.close;
     const originalDestroy = splitterWithDestroy.destroy.bind(splitterWithDestroy);
     splitterWithDestroy.destroy = function (err) {
         void bulkSender.close();
         originalDestroy(err);
     };
-    return splitter;
+    return splitterWithDestroy;
 };
 exports.createElasticTransport = createElasticTransport;
