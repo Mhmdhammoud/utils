@@ -24,4 +24,8 @@ export interface ElasticTransportOptions extends Pick<ClientOptions, 'node' | 'a
     rejectUnauthorized?: boolean;
     tls?: ClientOptions['tls'];
 }
-export declare const createElasticTransport: (opts?: ElasticTransportOptions) => NodeJS.ReadWriteStream;
+export interface ElasticTransportStream extends NodeJS.ReadWriteStream {
+    flush: () => Promise<void>;
+    close: () => Promise<void>;
+}
+export declare const createElasticTransport: (opts?: ElasticTransportOptions) => ElasticTransportStream;
