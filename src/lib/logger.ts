@@ -1,7 +1,10 @@
 import { Logger as PinoLogger, pino, stdTimeFunctions } from 'pino'
 import * as dotenv from 'dotenv'
 import { hostname } from 'os'
-import { createElasticTransport } from './elastic-transport'
+import {
+	createElasticTransport,
+	ElasticTransportStream,
+} from './elastic-transport'
 import { getTraceContext } from './trace-store'
 import { LOG_LEVEL, LogEvent, ElasticConfig } from '../types'
 
@@ -140,7 +143,7 @@ let pinoLogger: PinoLogger
 /**
  * Elasticsearch transport instance - kept for cleanup
  */
-let esTransport: NodeJS.ReadWriteStream | null = null
+let esTransport: ElasticTransportStream | null = null
 
 /**
  * Flag to track if shutdown handlers are registered
@@ -233,8 +236,15 @@ function registerShutdownHandlers(): void {
 						resolve()
 					})
 
-					// Now trigger the flush
-					esTransport?.end()
+					esTransport
+						?.flush()
+						.catch((error) => {
+							console.error(`[Logger] Error flushing logs on ${signal}:`, error)
+						})
+						.finally(() => {
+							// Now trigger stream shutdown
+							esTransport?.end()
+						})
 				})
 			} catch (error) {
 				console.error(`[Logger] Error flushing logs on ${signal}:`, error)
@@ -333,7 +343,7 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 			esTransport = createElasticTransport(esConfig)
 
 			// Handle Elasticsearch connection errors
-			esTransport.on('error', (err: Error) => {
+			esTransport.on('bulkError', (err: Error) => {
 				console.error('[Logger] Elasticsearch transport error:', err.message)
 				console.error(
 					'[Logger] Logs may not be reaching Kibana. Check Elasticsearch connection.'
