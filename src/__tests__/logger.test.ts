@@ -119,4 +119,30 @@ describe('route and format logs', () => {
 			})
 		)
 	})
+
+	test('sanitize empty, dotted, and whitespace context field names', () => {
+		//@ts-ignore
+		jest.spyOn(pino, 'destination').mockReturnValue(PINO_DESTINATION)
+		//@ts-ignore
+		pino.mockReturnValue(PINO)
+		const logger = new Logger(LOGGER_NAME)
+
+		logger.info(LOG_EVENT, {
+			'': 'empty',
+			'field.with.dots': 'dotted',
+			' field name ': 'spaced',
+			nested: { '   ': 'nested-empty' },
+		})
+
+		expect(PINO.info).toHaveBeenCalledWith(
+			expect.objectContaining({
+				context: {
+					unnamed_field: 'empty',
+					fieldwithdots: 'dotted',
+					fieldname: 'spaced',
+					nested: { unnamed_field: 'nested-empty' },
+				},
+			})
+		)
+	})
 })

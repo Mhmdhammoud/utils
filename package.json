@@ -1,13 +1,19 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.6.2",
+	"version": "1.6.3",
 	"description": "",
 	"main": "./dist/index.js",
 	"private": false,
 	"typings": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"imagesloaded.d.ts",
+		"README.md",
+		"ReleaseNotes.md"
+	],
 	"repository": {
 		"type": "git",
-		"url": "git@github.com:Mhmdhammoud/meritt-utils.git"
+		"url": "git+ssh://git@github.com/Mhmdhammoud/meritt-utils.git"
 	},
 	"publishConfig": {
 		"access": "public"
@@ -18,7 +24,7 @@
 		"watch": "tsc --watch",
 		"build": "tsc",
 		"test:types": "tsc --noemit",
-		"prepare": "husky install",
+		"prepare": "husky",
 		"lint": "eslint src --fix",
 		"prepublish": "npm run build",
 		"test": "jest",

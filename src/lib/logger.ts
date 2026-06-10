@@ -32,7 +32,8 @@ const RESERVED_ES_FIELD_ALIASES: Record<string, string> = {
 
 /** Convert arbitrary field names into ES-safe flattened keys */
 const toSafeElasticFieldName = (key: string): string => {
-	const normalized = toSnakeCase(key)
+	const cleaned = key.replace(/[.\s]+/g, '')
+	const normalized = toSnakeCase(cleaned) || 'unnamed_field'
 	const mapped = RESERVED_ES_FIELD_ALIASES[normalized]
 	if (mapped) {
 		return mapped
@@ -332,8 +333,8 @@ function getLogger(elasticConfig?: ElasticConfig): PinoLogger {
 				// Retry configuration for connection resilience
 				maxRetries: maxRetries,
 				requestTimeout: requestTimeout,
-				// Automatically reconnect on connection faults
-				sniffOnConnectionFault: true,
+				// Sniffing can bypass proxies and discover unreachable internal nodes.
+				sniffOnConnectionFault: false,
 			}
 			if (elasticConfig) {
 				Object.assign(esConfig, elasticConfig)

@@ -132,4 +132,25 @@ describe('route and format logs', () => {
             _id: expect.anything(),
         }));
     });
+    test('sanitize empty, dotted, and whitespace context field names', () => {
+        //@ts-ignore
+        jest.spyOn(pino_1.pino, 'destination').mockReturnValue(PINO_DESTINATION);
+        //@ts-ignore
+        pino_1.pino.mockReturnValue(PINO);
+        const logger = new logger_1.default(LOGGER_NAME);
+        logger.info(LOG_EVENT, {
+            '': 'empty',
+            'field.with.dots': 'dotted',
+            ' field name ': 'spaced',
+            nested: { '   ': 'nested-empty' },
+        });
+        expect(PINO.info).toHaveBeenCalledWith(expect.objectContaining({
+            context: {
+                unnamed_field: 'empty',
+                fieldwithdots: 'dotted',
+                field_name: 'spaced',
+                nested: { unnamed_field: 'nested-empty' },
+            },
+        }));
+    });
 });

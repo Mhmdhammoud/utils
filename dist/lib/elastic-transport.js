@@ -204,6 +204,7 @@ function createBulkSender(opts, client, splitter) {
     };
 }
 const createElasticTransport = (opts = {}) => {
+    var _a;
     const splitter = split(function (line) {
         let value;
         try {
@@ -240,7 +241,8 @@ const createElasticTransport = (opts = {}) => {
         tls: { rejectUnauthorized: opts.rejectUnauthorized, ...opts.tls },
         maxRetries: opts.maxRetries,
         requestTimeout: opts.requestTimeout,
-        sniffOnConnectionFault: opts.sniffOnConnectionFault,
+        // Keep the configured proxy endpoint unless callers explicitly opt in.
+        sniffOnConnectionFault: (_a = opts.sniffOnConnectionFault) !== null && _a !== void 0 ? _a : false,
     };
     if (opts.caFingerprint) {
         clientOpts.caFingerprint = opts.caFingerprint;
