@@ -60,7 +60,8 @@ export interface ElasticConfig {
 	requestTimeout?: number
 	/**
 	 * Whether to sniff for additional Elasticsearch nodes on connection fault.
-	 * Enables automatic reconnection when a node fails.
+	 * Defaults to false because sniffing can bypass a proxy and discover
+	 * internal node addresses that are unreachable or use a different protocol.
 	 */
 	sniffOnConnectionFault?: boolean
 }

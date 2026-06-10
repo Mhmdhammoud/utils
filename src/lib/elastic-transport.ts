@@ -318,7 +318,8 @@ export const createElasticTransport = (
 		tls: { rejectUnauthorized: opts.rejectUnauthorized, ...opts.tls },
 		maxRetries: opts.maxRetries,
 		requestTimeout: opts.requestTimeout,
-		sniffOnConnectionFault: opts.sniffOnConnectionFault,
+		// Keep the configured proxy endpoint unless callers explicitly opt in.
+		sniffOnConnectionFault: opts.sniffOnConnectionFault ?? false,
 	}
 
 	if (opts.caFingerprint) {

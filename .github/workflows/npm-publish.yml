@@ -78,7 +78,12 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Verify NPM authentication
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
+
       - name: Publish to NPM
-        run: npm publish
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.npm_token }}

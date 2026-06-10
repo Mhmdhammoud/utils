@@ -1,5 +1,19 @@
 # Changes
 
+## Version 1.6.3
+
+### Elasticsearch Proxy Logging Fix
+
+- Disabled Elasticsearch node sniffing by default. Sniffing is unsafe when the
+  configured endpoint is an HTTPS proxy because discovered nodes may advertise
+  internal addresses or a different protocol.
+- Preserved explicit opt-in through `sniffOnConnectionFault: true` for direct
+  multi-node Elasticsearch deployments.
+- Sanitized dots and whitespace from recursive context field names.
+- Replaced empty context field names with `unnamed_field`.
+- Added regression coverage for proxy-safe transport configuration and context
+  field sanitization.
+
 ## Version 1.5.3
 
 ### Logger Improvements - Critical Bug Fixes & Production Reliability
@@ -34,7 +48,9 @@
   - Handles `SIGTERM` and `SIGINT` signals
   - 5-second timeout prevents hanging forever
   - Proper async/await handling to ensure flush completes
-- **Auto-reconnection**: `sniffOnConnectionFault: true` enables automatic reconnection when Elasticsearch nodes fail
+- **Node discovery**: `sniffOnConnectionFault` is available for direct
+  multi-node Elasticsearch deployments. It should remain disabled behind a
+  proxy because discovered node addresses may not be externally reachable.
 - **Retry logic**: Configurable retry attempts with timeout for failed requests
 
 #### Type Safety

@@ -27,6 +27,29 @@ describe('elastic transport resilience', () => {
 		MockedClient.mockReset()
 	})
 
+	test('disables node sniffing by default', () => {
+		MockedClient.mockImplementation(() => ({ bulk: jest.fn() }))
+
+		createElasticTransport({ index: 'logs' })
+
+		expect(MockedClient).toHaveBeenCalledWith(
+			expect.objectContaining({ sniffOnConnectionFault: false })
+		)
+	})
+
+	test('allows node sniffing only when explicitly enabled', () => {
+		MockedClient.mockImplementation(() => ({ bulk: jest.fn() }))
+
+		createElasticTransport({
+			index: 'logs',
+			sniffOnConnectionFault: true,
+		})
+
+		expect(MockedClient).toHaveBeenCalledWith(
+			expect.objectContaining({ sniffOnConnectionFault: true })
+		)
+	})
+
 	test('reports bulk failures without emitting terminal stream errors', async () => {
 		const bulk = jest
 			.fn()
