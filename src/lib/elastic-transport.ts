@@ -102,6 +102,7 @@ function createBulkSender(
 	let bufferedBytes = 0
 	let timer: NodeJS.Timeout | undefined
 	let isFlushing = false
+	let activeFlush: Promise<void> = Promise.resolve()
 	let flushAgain = false
 
 	const indexName = (time = new Date().toISOString()) =>
@@ -210,7 +211,8 @@ function createBulkSender(
 	const flush = async (): Promise<void> => {
 		if (isFlushing) {
 			flushAgain = true
-			return
+			await activeFlush
+			return flush()
 		}
 		clearFlushTimer()
 		if (buffer.length === 0) {
@@ -218,6 +220,10 @@ function createBulkSender(
 		}
 
 		isFlushing = true
+		let finishFlush!: () => void
+		activeFlush = new Promise<void>((resolve) => {
+			finishFlush = resolve
+		})
 		const batch = buffer
 		buffer = []
 		bufferedBytes = 0
@@ -248,6 +254,7 @@ function createBulkSender(
 			batch.forEach((doc) => emitDroppedDocument(doc, err))
 		} finally {
 			isFlushing = false
+			finishFlush()
 			if (flushAgain || buffer.length > 0) {
 				flushAgain = false
 				scheduleFlush()

@@ -48,6 +48,7 @@ function createBulkSender(opts, client, splitter) {
     let bufferedBytes = 0;
     let timer;
     let isFlushing = false;
+    let activeFlush = Promise.resolve();
     let flushAgain = false;
     const indexName = (time = new Date().toISOString()) => buildIndexName ? buildIndexName(time) : getIndexName(index, time);
     const clearFlushTimer = () => {
@@ -141,13 +142,18 @@ function createBulkSender(opts, client, splitter) {
         var _a, _b;
         if (isFlushing) {
             flushAgain = true;
-            return;
+            await activeFlush;
+            return flush();
         }
         clearFlushTimer();
         if (buffer.length === 0) {
             return;
         }
         isFlushing = true;
+        let finishFlush;
+        activeFlush = new Promise((resolve) => {
+            finishFlush = resolve;
+        });
         const batch = buffer;
         buffer = [];
         bufferedBytes = 0;
@@ -177,6 +183,7 @@ function createBulkSender(opts, client, splitter) {
         }
         finally {
             isFlushing = false;
+            finishFlush();
             if (flushAgain || buffer.length > 0) {
                 flushAgain = false;
                 scheduleFlush();
