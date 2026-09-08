@@ -55,6 +55,9 @@ jobs:
           path: dist/
 
   publish-npm:
+    permissions:
+      contents: read
+      id-token: write
     needs: [test, build]
     runs-on: ubuntu-latest
     if: success()
@@ -65,8 +68,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          registry-url: https://registry.npmjs.org/
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -78,12 +80,8 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Verify NPM authentication
-        run: npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
-
+      # npm exchanges this workflow's OIDC identity for a short-lived publish
+      # credential. Configure npm's trusted publisher for Mhmdhammoud/utils,
+      # workflow npm-publish.yml; no long-lived npm token is needed.
       - name: Publish to NPM
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}

@@ -1,6 +1,6 @@
 {
 	"name": "@mhmdhammoud/meritt-utils",
-	"version": "1.6.4",
+	"version": "1.6.5",
 	"description": "",
 	"main": "./dist/index.js",
 	"private": false,
@@ -13,7 +13,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+ssh://git@github.com/Mhmdhammoud/meritt-utils.git"
+		"url": "git+https://github.com/Mhmdhammoud/utils.git"
 	},
 	"publishConfig": {
 		"access": "public"
