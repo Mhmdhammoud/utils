@@ -150,6 +150,8 @@ let esTransport: ElasticTransportStream | null = null
  * Flag to track if shutdown handlers are registered
  */
 let shutdownHandlersRegistered = false
+let automaticShutdown = true
+let closePromise: Promise<void> | undefined
 
 /**
  * Validates required Elasticsearch environment variables.
@@ -205,6 +207,33 @@ function parseIntEnv(
 	return parsed
 }
 
+/** Flush and end the shared transport once, without terminating the process. */
+function closeLogger(): Promise<void> {
+	if (!esTransport) return Promise.resolve()
+	if (closePromise) return closePromise
+	const transport = esTransport
+	closePromise = new Promise<void>((resolve, reject) => {
+		const finish = (error?: Error) => {
+			clearTimeout(timeout)
+			transport.removeListener('finish', onFinish)
+			transport.removeListener('error', finish)
+			if (error) reject(error)
+			else resolve()
+		}
+		const onFinish = () => finish()
+		const timeout = setTimeout(() => {
+			finish(new Error('Logger close timed out after 5s'))
+		}, 5000)
+		transport.once('finish', onFinish)
+		transport.once('error', finish)
+		void Promise.resolve()
+			.then(() => transport.flush())
+			.then(() => transport.end())
+			.catch(finish)
+	})
+	return closePromise
+}
+
 /**
  * Registers shutdown handlers to flush logs before process exits.
  */
@@ -215,61 +244,33 @@ function registerShutdownHandlers(): void {
 
 	let isShuttingDown = false
 
-	const flushAndExit = async (signal: string, exitCode = 0) => {
+	const flushAndExit = async (exitCode = 0) => {
 		// Prevent multiple shutdown attempts
-		if (isShuttingDown) {
+		if (!automaticShutdown || isShuttingDown) {
 			return
 		}
 		isShuttingDown = true
 
-		if (esTransport) {
-			try {
-				// Flush any pending logs
-				await new Promise<void>((resolve) => {
-					const timeout = setTimeout(() => {
-						console.error(`[Logger] Flush timeout after 5s on ${signal}`)
-						resolve()
-					}, 5000) // 5 second timeout
-
-					// Register listener BEFORE calling end() to avoid race condition
-					esTransport?.once('finish', () => {
-						clearTimeout(timeout)
-						resolve()
-					})
-
-					esTransport
-						?.flush()
-						.catch((error) => {
-							console.error(`[Logger] Error flushing logs on ${signal}:`, error)
-						})
-						.finally(() => {
-							// Now trigger stream shutdown
-							esTransport?.end()
-						})
-				})
-			} catch (error) {
-				console.error(`[Logger] Error flushing logs on ${signal}:`, error)
-			}
-		}
+		await closeLogger()
 		process.exit(exitCode)
 	}
 
 	process.on('SIGTERM', () => {
-		flushAndExit('SIGTERM', 0).catch((err) => {
+		flushAndExit(0).catch((err) => {
 			console.error('[Logger] Flush and exit failed:', err)
 			process.exit(1)
 		})
 	})
 
 	process.on('SIGINT', () => {
-		flushAndExit('SIGINT', 130).catch((err) => {
+		flushAndExit(130).catch((err) => {
 			console.error('[Logger] Flush and exit failed:', err)
 			process.exit(1)
 		})
 	})
 
 	process.on('beforeExit', () => {
-		if (esTransport && !isShuttingDown) {
+		if (automaticShutdown && esTransport && !isShuttingDown) {
 			esTransport.end()
 		}
 	})
@@ -413,6 +414,24 @@ export function isValidLogLevel(level: string): level is LOG_LEVEL {
  * Wraps a Pino logger instance and provides logging methods.
  */
 class Logger {
+	/**
+	 * Let the application own SIGTERM/SIGINT and process exit. Safe to call
+	 * before or after constructing loggers. Applies to every logger instance.
+	 * The application must await Logger.close() after its active work drains.
+	 */
+	static disableAutomaticShutdown(): void {
+		automaticShutdown = false
+	}
+
+	/**
+	 * Flush and end the shared Elasticsearch transport without exiting.
+	 * Call only after all application logging is done. Repeated calls share
+	 * one promise; transport errors or a five-second timeout reject it.
+	 */
+	static close(): Promise<void> {
+		return closeLogger()
+	}
+
 	private readonly _name: string
 	private readonly _logger: PinoLogger
 

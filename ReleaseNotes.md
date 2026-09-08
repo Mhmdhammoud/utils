@@ -1,3 +1,7 @@
+## 1.6.4
+
+- Add `Logger.disableAutomaticShutdown()` for applications that drain workers before exiting. Call `await Logger.close()` after application cleanup to flush and close the shared transport. Automatic signal handling remains enabled by default.
+
 # Changes
 
 ## Version 1.6.3
