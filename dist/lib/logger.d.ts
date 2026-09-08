@@ -10,6 +10,18 @@ export declare function isValidLogLevel(level: string): level is LOG_LEVEL;
  * Wraps a Pino logger instance and provides logging methods.
  */
 declare class Logger {
+    /**
+     * Let the application own SIGTERM/SIGINT and process exit. Safe to call
+     * before or after constructing loggers. Applies to every logger instance.
+     * The application must await Logger.close() after its active work drains.
+     */
+    static disableAutomaticShutdown(): void;
+    /**
+     * Flush and end the shared Elasticsearch transport without exiting.
+     * Call only after all application logging is done. Repeated calls share
+     * one promise; transport errors or a five-second timeout reject it.
+     */
+    static close(): Promise<void>;
     private readonly _name;
     private readonly _logger;
     /**

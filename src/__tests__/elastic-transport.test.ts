@@ -115,3 +115,33 @@ describe('elastic transport resilience', () => {
 		expect(bulk).toHaveBeenCalledTimes(2)
 	})
 })
+
+test('flush waits for an in-flight batch and the buffered shutdown logs', async () => {
+	let finishFirst!: (value: unknown) => void
+	const bulk = jest
+		.fn()
+		.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishFirst = resolve
+				})
+		)
+		.mockResolvedValue({ errors: false, items: [] })
+	MockedClient.mockImplementation(() => ({ bulk }))
+	const transport = createElasticTransport({
+		flushBytes: 1,
+		flushInterval: 10000,
+	})
+	writeLog(transport, { message: 'in flight' })
+	writeLog(transport, { message: 'last shutdown log' })
+	let flushed = false
+	const closing = transport.flush().then(() => {
+		flushed = true
+	})
+	await Promise.resolve()
+	expect(flushed).toBe(false)
+	finishFirst({ errors: false, items: [] })
+	await closing
+	expect(bulk).toHaveBeenCalledTimes(2)
+	transport.end()
+})
